@@ -1,0 +1,1162 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>导弹-烟球-圆柱遮蔽参数优化算法</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        :root {
+            --panel-bg: rgba(0, 0, 0, 0.85);
+            --accent: #4CAF50;
+            --warning: #FF9800;
+            --error: #F44336;
+        }
+
+        html, body {
+            margin: 0;
+            height: 100%;
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #16213e 100%);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #fff;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin: 0;
+            background: linear-gradient(45deg, #4CAF50, #2196F3);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .control-panel {
+            background: var(--panel-bg);
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 20px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .section {
+            background: var(--panel-bg);
+            border-radius: 15px;
+            padding: 20px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .section h3 {
+            margin: 0 0 15px 0;
+            color: var(--accent);
+            font-size: 1.3em;
+        }
+
+        .param-group {
+            margin-bottom: 15px;
+        }
+
+        .param-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+        }
+
+        .param-input {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        input[type="range"] {
+            flex: 1;
+            height: 6px;
+            border-radius: 3px;
+            background: #333;
+            outline: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: var(--accent);
+            cursor: pointer;
+        }
+
+        .param-value {
+            min-width: 80px;
+            text-align: right;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            color: var(--accent);
+        }
+
+        .btn {
+            background: var(--accent);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            margin: 5px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+        }
+
+        .btn:disabled {
+            background: #555;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .btn-warning {
+            background: var(--warning);
+        }
+
+        .btn-error {
+            background: var(--error);
+        }
+
+        .results {
+            background: var(--panel-bg);
+            border-radius: 15px;
+            padding: 20px;
+            margin-top: 20px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .result-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .result-item:last-child {
+            border-bottom: none;
+        }
+
+        .result-label {
+            font-weight: 600;
+        }
+
+        .result-value {
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            color: var(--accent);
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #333;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent), #2196F3);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .status {
+            text-align: center;
+            padding: 10px;
+            border-radius: 8px;
+            margin: 10px 0;
+            font-weight: 600;
+        }
+
+        .status.running {
+            background: rgba(255, 152, 0, 0.2);
+            color: var(--warning);
+        }
+
+        .status.completed {
+            background: rgba(76, 175, 80, 0.2);
+            color: var(--accent);
+        }
+
+        .optimization-log {
+            background: #1a1a1a;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 15px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+
+        .log-entry {
+            margin-bottom: 5px;
+        }
+
+        .log-entry.info {
+            color: #4CAF50;
+        }
+
+        .log-entry.warning {
+            color: #FF9800;
+        }
+
+        .log-entry.error {
+            color: #F44336;
+        }
+
+        @media (max-width: 768px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>导弹-烟球-圆柱遮蔽参数优化算法</h1>
+            <p>基于超高精度遮蔽判定算法的参数优化与最长遮蔽时间计算</p>
+        </div>
+
+        <div class="control-panel">
+            <h3>优化控制面板</h3>
+            <div style="text-align: center;">
+                <button class="btn" id="startOptimization">开始参数优化</button>
+                <button class="btn btn-warning" id="pauseOptimization" disabled>暂停优化</button>
+                <button class="btn btn-error" id="resetOptimization">重置参数</button>
+                <button class="btn" id="exportResults">导出结果</button>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div class="status" id="optimizationStatus">就绪</div>
+        </div>
+
+        <div class="grid">
+            <div class="section">
+                <h3>无人机参数设置</h3>
+                
+                <div class="param-group">
+                    <label>飞行速度 (m/s)</label>
+                    <div class="param-input">
+                        <input type="range" id="droneSpeed" min="70" max="140" step="1" value="120">
+                        <span class="param-value" id="droneSpeedValue">120</span>
+                    </div>
+                </div>
+
+                <div class="param-group">
+                    <label>飞行方向角度 (度)</label>
+                    <div class="param-input">
+                        <input type="range" id="droneDirection" min="0" max="360" step="1" value="180">
+                        <span class="param-value" id="droneDirectionValue">180°</span>
+                    </div>
+                </div>
+
+                <div class="param-group">
+                    <label>初始位置 X (m)</label>
+                    <div class="param-input">
+                        <input type="range" id="droneInitX" min="10000" max="25000" step="100" value="17800">
+                        <span class="param-value" id="droneInitXValue">17800</span>
+                    </div>
+                </div>
+
+                <div class="param-group">
+                    <label>初始位置 Y (m)</label>
+                    <div class="param-input">
+                        <input type="range" id="droneInitY" min="-5000" max="5000" step="100" value="0">
+                        <span class="param-value" id="droneInitYValue">0</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h3>烟幕弹参数设置</h3>
+                
+                <div class="param-group">
+                    <label>投放时间 (s)</label>
+                    <div class="param-input">
+                        <input type="range" id="throwTime" min="0.5" max="3.0" step="0.1" value="1.5">
+                        <span class="param-value" id="throwTimeValue">1.5</span>
+                    </div>
+                </div>
+
+                <div class="param-group">
+                    <label>平抛时间 (s)</label>
+                    <div class="param-input">
+                        <input type="range" id="fallTime" min="2.0" max="5.0" step="0.1" value="3.6">
+                        <span class="param-value" id="fallTimeValue">3.6</span>
+                    </div>
+                </div>
+
+                <div class="param-group">
+                    <label>烟球半径 (m) (固定)</label>
+                    <div class="param-input">
+                        <input type="range" id="smokeRadius" min="10" max="10" step="0.5" value="10" disabled>
+                        <span class="param-value" id="smokeRadiusValue">10</span>
+                    </div>
+                </div>
+
+                <div class="param-group">
+                    <label>下沉速度 (m/s)</label>
+                    <div class="param-input">
+                        <input type="range" id="sinkSpeed" min="1" max="5" step="0.1" value="3">
+                        <span class="param-value" id="sinkSpeedValue">3</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="results">
+            <h3>优化结果</h3>
+            <div class="result-item">
+                <span class="result-label">当前遮蔽时间:</span>
+                <span class="result-value" id="currentBlockTime">-- s</span>
+            </div>
+            <div class="result-item">
+                <span class="result-label">最优遮蔽时间:</span>
+                <span class="result-value" id="maxBlockTime">-- s</span>
+            </div>
+            <div class="result-item">
+                <span class="result-label">最优无人机速度:</span>
+                <span class="result-value" id="optimalDroneSpeed">-- m/s</span>
+            </div>
+            <div class="result-item">
+                <span class="result-label">最优飞行方向:</span>
+                <span class="result-value" id="optimalDirection">-- °</span>
+            </div>
+            <div class="result-item">
+                <span class="result-label">最优投放时间:</span>
+                <span class="result-value" id="optimalThrowTime">-- s</span>
+            </div>
+            <div class="result-item">
+                <span class="result-label">最优起爆时间:</span>
+                <span class="result-value" id="optimalBoomTime">-- s</span>
+            </div>
+            <div class="result-item">
+                <span class="result-label">优化迭代次数:</span>
+                <span class="result-value" id="iterationCount">0</span>
+            </div>
+            <div class="result-item">
+                <span class="result-label">计算精度:</span>
+                <span class="result-value" id="calculationAccuracy">超高精度算法</span>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>优化日志</h3>
+            <div class="optimization-log" id="optimizationLog">
+                <div class="log-entry info">[系统] 参数优化算法已就绪</div>
+                <div class="log-entry info">[算法] 基于超高精度遮蔽判定算法</div>
+                <div class="log-entry info">[范围] 无人机速度: 70-140 m/s, 方向: 0-360°</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * 导弹-烟球-圆柱遮蔽参数优化算法
+         * 基于超高精度遮蔽判定算法，优化无人机参数以获得最长遮蔽时间
+         */
+
+        // ========== 物理常量和初始条件 ==========
+        const g = 9.8; // 重力加速度 m/s²
+        const v_missile = 500; // 导弹速度 m/s
+        
+        // 导弹初始位置 M(0,0,1000)
+        const M0 = new THREE.Vector3(0, 0, 1000);
+        
+        // 圆柱体目标参数 B(20000,0,0)
+        const B_CENTER = new THREE.Vector3(20000, 0, 0); // 圆柱体中心
+        const B_RADIUS = 100; // 圆柱体半径 m
+        const B_HEIGHT = 200; // 圆柱体高度 m
+        
+        // 固定参数
+        const SMOKE_RADIUS = 10; // 烟球半径固定为10m
+        const DRONE_HEIGHT = 1800; // 无人机飞行高度固定为1800m
+
+        // ========== 优化状态 ==========
+        const optimizationState = {
+            running: false,
+            paused: false,
+            iteration: 0,
+            maxIterations: 1000,
+            bestResult: {
+                blockTime: 0,
+                droneSpeed: 120,
+                droneDirection: 180,
+                droneInitX: 17800,
+                droneInitY: 0,
+                throwTime: 1.5,
+                fallTime: 3.6,
+                smokeRadius: 10,
+                sinkSpeed: 3
+            },
+            currentParams: {},
+            log: []
+        };
+
+        // ========== UI 元素 ==========
+        const elements = {
+            // 控制按钮
+            startBtn: document.getElementById('startOptimization'),
+            pauseBtn: document.getElementById('pauseOptimization'),
+            resetBtn: document.getElementById('resetOptimization'),
+            exportBtn: document.getElementById('exportResults'),
+            
+            // 进度和状态
+            progressFill: document.getElementById('progressFill'),
+            status: document.getElementById('optimizationStatus'),
+            
+            // 参数滑块
+            droneSpeed: document.getElementById('droneSpeed'),
+            droneDirection: document.getElementById('droneDirection'),
+            droneInitX: document.getElementById('droneInitX'),
+            droneInitY: document.getElementById('droneInitY'),
+            throwTime: document.getElementById('throwTime'),
+            fallTime: document.getElementById('fallTime'),
+            smokeRadius: document.getElementById('smokeRadius'),
+            sinkSpeed: document.getElementById('sinkSpeed'),
+            
+            // 参数值显示
+            droneSpeedValue: document.getElementById('droneSpeedValue'),
+            droneDirectionValue: document.getElementById('droneDirectionValue'),
+            droneInitXValue: document.getElementById('droneInitXValue'),
+            droneInitYValue: document.getElementById('droneInitYValue'),
+            throwTimeValue: document.getElementById('throwTimeValue'),
+            fallTimeValue: document.getElementById('fallTimeValue'),
+            smokeRadiusValue: document.getElementById('smokeRadiusValue'),
+            sinkSpeedValue: document.getElementById('sinkSpeedValue'),
+            
+            // 结果显示
+            currentBlockTime: document.getElementById('currentBlockTime'),
+            maxBlockTime: document.getElementById('maxBlockTime'),
+            optimalDroneSpeed: document.getElementById('optimalDroneSpeed'),
+            optimalDirection: document.getElementById('optimalDirection'),
+            optimalThrowTime: document.getElementById('optimalThrowTime'),
+            optimalBoomTime: document.getElementById('optimalBoomTime'),
+            iterationCount: document.getElementById('iterationCount'),
+            calculationAccuracy: document.getElementById('calculationAccuracy'),
+            
+            // 日志
+            log: document.getElementById('optimizationLog')
+        };
+
+        // ========== 初始化 ==========
+        function init() {
+            bindEvents();
+            updateParamValues();
+            updateCurrentParams();
+            calculateCurrentBlockTime();
+        }
+
+        function bindEvents() {
+            // 控制按钮事件
+            elements.startBtn.addEventListener('click', startOptimization);
+            elements.pauseBtn.addEventListener('click', pauseOptimization);
+            elements.resetBtn.addEventListener('click', resetOptimization);
+            elements.exportBtn.addEventListener('click', exportResults);
+            
+            // 参数滑块事件
+            const paramSliders = [
+                'droneSpeed', 'droneDirection', 'droneInitX', 'droneInitY',
+                'throwTime', 'fallTime', 'smokeRadius', 'sinkSpeed'
+            ];
+            
+            paramSliders.forEach(param => {
+                elements[param].addEventListener('input', () => {
+                    updateParamValues();
+                    updateCurrentParams();
+                    calculateCurrentBlockTime();
+                });
+            });
+        }
+
+        function updateParamValues() {
+            elements.droneSpeedValue.textContent = elements.droneSpeed.value;
+            elements.droneDirectionValue.textContent = elements.droneDirection.value + '°';
+            elements.droneInitXValue.textContent = elements.droneInitX.value;
+            elements.droneInitYValue.textContent = elements.droneInitY.value;
+            elements.throwTimeValue.textContent = elements.throwTime.value;
+            elements.fallTimeValue.textContent = elements.fallTime.value;
+            elements.smokeRadiusValue.textContent = elements.smokeRadius.value;
+            elements.sinkSpeedValue.textContent = elements.sinkSpeed.value;
+        }
+
+        function updateCurrentParams() {
+            optimizationState.currentParams = {
+                droneSpeed: parseFloat(elements.droneSpeed.value),
+                droneDirection: parseFloat(elements.droneDirection.value),
+                droneInitX: parseFloat(elements.droneInitX.value),
+                droneInitY: parseFloat(elements.droneInitY.value),
+                throwTime: parseFloat(elements.throwTime.value),
+                fallTime: parseFloat(elements.fallTime.value),
+                sinkSpeed: parseFloat(elements.sinkSpeed.value)
+            };
+        }
+
+        // ========== 核心算法：超高精度遮蔽判定 ==========
+        function calculateBlockingTime(params) {
+            const {
+                droneSpeed, droneDirection, droneInitX, droneInitY,
+                throwTime, fallTime, sinkSpeed
+            } = params;
+            
+            // 参数验证
+            if (droneSpeed < 70 || droneSpeed > 140) return 0;
+            if (throwTime < 0.5 || throwTime > 3.0) return 0;
+            if (fallTime < 2.0 || fallTime > 5.0) return 0;
+            if (sinkSpeed < 1 || sinkSpeed > 5) return 0;
+            
+            // 无人机初始位置 D₀(x,y,1800)
+            const D0 = new THREE.Vector3(droneInitX, droneInitY, DRONE_HEIGHT);
+            
+            // 无人机飞行方向向量（单位向量）
+            const directionRad = (droneDirection * Math.PI) / 180;
+            const droneDir = new THREE.Vector3(
+                Math.cos(directionRad),
+                Math.sin(directionRad),
+                0
+            ).normalize();
+            
+            const boomTime = throwTime + fallTime;
+            let blockStart = null;
+            let blockEnd = null;
+            let wasBlocked = false;
+            
+            // 超精细时间步长仿真
+            const maxTime = boomTime + 20; // 最大仿真时间
+            const timeStep = 0.001; // 1ms精度
+            
+            for (let t = boomTime; t <= maxTime; t += timeStep) {
+                // 计算当前时刻各物体位置
+                const missilePos = getMissilePosition(t);
+                const smokePos = getSmokePosition(t, D0, droneDir, droneSpeed, throwTime, fallTime, sinkSpeed);
+                
+                // 检查烟球是否还有效（未落地且在有效时间内）
+                if (smokePos.z < -SMOKE_RADIUS || (t - boomTime) > 20) {
+                    break;
+                }
+                
+                // 超高精度遮蔽判定
+                const isBlocked = isCylinderInShadowCone(missilePos, smokePos, SMOKE_RADIUS);
+                
+                if (isBlocked && !wasBlocked) {
+                    blockStart = t;
+                    wasBlocked = true;
+                } else if (!isBlocked && wasBlocked && blockEnd === null) {
+                    blockEnd = t;
+                    break;
+                }
+            }
+            
+            // 计算遮蔽时间
+            if (blockStart !== null && blockEnd !== null) {
+                return blockEnd - blockStart;
+            } else if (blockStart !== null) {
+                // 遮蔽持续到仿真结束
+                return maxTime - blockStart;
+            }
+            
+            return 0;
+        }
+
+        function getMissilePosition(t) {
+            const direction = M0.clone().multiplyScalar(-1).normalize();
+            return M0.clone().add(direction.multiplyScalar(v_missile * t));
+        }
+
+        function getSmokePosition(t, D0, droneDir, droneSpeed, throwTime, fallTime, sinkSpeed) {
+            const boomTime = throwTime + fallTime;
+            
+            if (t < boomTime) {
+                return null; // 烟球尚未形成
+            }
+            
+            // 计算烟幕弹投放点 P = D₀ + v⃗ₐ·t₁
+            const throwPos = D0.clone().add(droneDir.clone().multiplyScalar(droneSpeed * throwTime));
+            
+            // 计算烟幕弹起爆点（平抛运动）
+            // x = x₀ + v₀ₓ·t₂, y = y₀ + v₀ᵧ·t₂, z = z₀ - ½gt₂²
+            const initialVel = droneDir.clone().multiplyScalar(droneSpeed);
+            const explosionPos = new THREE.Vector3(
+                throwPos.x + initialVel.x * fallTime,
+                throwPos.y + initialVel.y * fallTime,
+                throwPos.z - 0.5 * g * fallTime * fallTime
+            );
+            
+            // 计算当前时刻烟球中心位置（匀速下沉）
+            // S(t) = S₀ - v_sink·(t - t_boom)
+            const sinkTime = t - boomTime;
+            return new THREE.Vector3(
+                explosionPos.x,
+                explosionPos.y,
+                explosionPos.z - sinkSpeed * sinkTime
+            );
+        }
+
+        // 超高精度遮蔽判定算法（基于原始a.html的算法）
+        function isCylinderInShadowCone(missilePos, smokeCenter, smokeRadius) {
+            if (!smokeCenter) return false;
+            
+            const MS = smokeCenter.clone().sub(missilePos);
+            const distMS = MS.length();
+            
+            if (distMS <= smokeRadius + 1e-6) return false;
+            
+            const coneAxis = MS.clone().normalize();
+            const sinAlpha = smokeRadius / distMS;
+            const cosAlpha = Math.sqrt(1 - sinAlpha * sinAlpha);
+            const tanAlpha = sinAlpha / cosAlpha;
+            
+            // 使用正确的圆柱体参数
+            const cylinderCenter = B_CENTER;
+            const cylinderRadius = B_RADIUS;
+            const cylinderHeight = B_HEIGHT;
+            
+            // 超密集采样
+            const samplingPoints = [];
+            
+            // 轴线采样（50点）
+            for (let i = 0; i <= 49; i++) {
+                const z = cylinderCenter.z - cylinderHeight/2 + (cylinderHeight * i / 49);
+                samplingPoints.push(new THREE.Vector3(cylinderCenter.x, cylinderCenter.y, z));
+            }
+            
+            // 表面采样（圆周 × 高度层）
+            for (let layer = 0; layer <= 20; layer++) {
+                const z = cylinderCenter.z - cylinderHeight/2 + (cylinderHeight * layer / 20);
+                for (let angle = 0; angle < 360; angle += 5) {
+                    const rad = (angle * Math.PI) / 180;
+                    const x = cylinderCenter.x + cylinderRadius * Math.cos(rad);
+                    const y = cylinderCenter.y + cylinderRadius * Math.sin(rad);
+                    samplingPoints.push(new THREE.Vector3(x, y, z));
+                }
+            }
+            
+            // 内部采样（极坐标）
+            for (let layer = 0; layer <= 15; layer++) {
+                const z = cylinderCenter.z - cylinderHeight/2 + (cylinderHeight * layer / 15);
+                for (let r = 0.2; r <= 1.0; r += 0.2) {
+                    const radius = r * cylinderRadius;
+                    for (let angle = 0; angle < 360; angle += 10) {
+                        const rad = (angle * Math.PI) / 180;
+                        const x = cylinderCenter.x + radius * Math.cos(rad);
+                        const y = cylinderCenter.y + radius * Math.sin(rad);
+                        samplingPoints.push(new THREE.Vector3(x, y, z));
+                    }
+                }
+            }
+            
+            // 边缘特殊采样
+            for (let layer = 0; layer <= 10; layer++) {
+                const z = cylinderCenter.z - cylinderHeight/2 + (cylinderHeight * layer / 10);
+                for (let angle = 0; angle < 360; angle += 3) {
+                    const rad = (angle * Math.PI) / 180;
+                    for (let rFactor = 0.95; rFactor <= 1.0; rFactor += 0.025) {
+                        const radius = rFactor * cylinderRadius;
+                        const x = cylinderCenter.x + radius * Math.cos(rad);
+                        const y = cylinderCenter.y + radius * Math.sin(rad);
+                        samplingPoints.push(new THREE.Vector3(x, y, z));
+                    }
+                }
+            }
+            
+            // 检查采样点
+            let pointsInShadow = 0;
+            const totalPoints = samplingPoints.length;
+            
+            for (const point of samplingPoints) {
+                if (isPointInShadowCone(point, missilePos, smokeCenter, smokeRadius, coneAxis, cosAlpha, tanAlpha, distMS)) {
+                    pointsInShadow++;
+                }
+            }
+            
+            const shadowRatio = pointsInShadow / totalPoints;
+            
+            // 解析几何验证
+            const analyticalResult = analyticalConeIntersection(missilePos, smokeCenter, smokeRadius, cylinderCenter, cylinderRadius, cylinderHeight);
+            
+            // 超敏感阈值判定
+            const primaryThreshold = 0.12;
+            const samplingResult = shadowRatio > primaryThreshold;
+            
+            // 边界精确验证
+            let extraPrecisionResult = false;
+            if (shadowRatio > 0.08 && shadowRatio < 0.18) {
+                extraPrecisionResult = performExtraPrecisionCheck(missilePos, smokeCenter, smokeRadius, cylinderCenter, cylinderRadius, cylinderHeight);
+            }
+            
+            return samplingResult || analyticalResult || extraPrecisionResult;
+        }
+
+        function isPointInShadowCone(point, missilePos, smokeCenter, smokeRadius, coneAxis, cosAlpha, tanAlpha, distMS) {
+            const MP = point.clone().sub(missilePos);
+            const distMP = MP.length();
+            
+            if (distMP < 1e-6) return false;
+            
+            const projectionLength = MP.dot(coneAxis);
+            if (projectionLength <= distMS) return false;
+            
+            const projection = coneAxis.clone().multiplyScalar(projectionLength);
+            const perpendicular = MP.clone().sub(projection);
+            const perpDistance = perpendicular.length();
+            
+            const coneRadiusAtPoint = tanAlpha * (projectionLength - distMS);
+            const tolerance = 0.05;
+            
+            return perpDistance <= coneRadiusAtPoint + tolerance;
+        }
+
+        function analyticalConeIntersection(missilePos, smokeCenter, smokeRadius, cylinderCenter, cylinderRadius, cylinderHeight) {
+            const MS = smokeCenter.clone().sub(missilePos);
+            const distMS = MS.length();
+            const coneAxis = MS.clone().normalize();
+            const tanAlpha = smokeRadius / Math.sqrt(distMS * distMS - smokeRadius * smokeRadius);
+            
+            // 检查圆柱体多个水平切片与阴影圆锥的交集
+            for (let i = 0; i <= 20; i++) {
+                const z = cylinderCenter.z - cylinderHeight/2 + (cylinderHeight * i / 20);
+                const circleCenter = new THREE.Vector3(cylinderCenter.x, cylinderCenter.y, z);
+                
+                if (circleIntersectsCone(circleCenter, cylinderRadius, missilePos, coneAxis, tanAlpha, distMS)) {
+                    return true;
+                }
+            }
+            
+            return false;
+        }
+
+        function circleIntersectsCone(circleCenter, circleRadius, missilePos, coneAxis, tanAlpha, distMS) {
+            const MC = circleCenter.clone().sub(missilePos);
+            const projLength = MC.dot(coneAxis);
+            
+            if (projLength <= distMS) return false;
+            
+            const coneRadiusAtCircle = tanAlpha * (projLength - distMS);
+            const projection = coneAxis.clone().multiplyScalar(projLength);
+            const perpendicular = MC.clone().sub(projection);
+            const perpDistance = perpendicular.length();
+            
+            return (perpDistance - circleRadius) <= coneRadiusAtCircle;
+        }
+
+        function performExtraPrecisionCheck(missilePos, smokeCenter, smokeRadius, cylinderCenter, cylinderRadius, cylinderHeight) {
+            // 蒙特卡洛方法验证
+            const monteCarloSamples = 5000;
+            let pointsInShadow = 0;
+            
+            for (let i = 0; i < monteCarloSamples; i++) {
+                // 在圆柱体内随机采样
+                const theta = Math.random() * 2 * Math.PI;
+                const r = Math.sqrt(Math.random()) * cylinderRadius;
+                const z = cylinderCenter.z - cylinderHeight/2 + Math.random() * cylinderHeight;
+                
+                const point = new THREE.Vector3(
+                    cylinderCenter.x + r * Math.cos(theta),
+                    cylinderCenter.y + r * Math.sin(theta),
+                    z
+                );
+                
+                if (isPointInShadowConeHighPrecision(point, missilePos, smokeCenter, smokeRadius)) {
+                    pointsInShadow++;
+                }
+            }
+            
+            return (pointsInShadow / monteCarloSamples) > 0.1;
+        }
+
+        function isPointInShadowConeHighPrecision(point, missilePos, smokeCenter, smokeRadius) {
+            const MS = smokeCenter.clone().sub(missilePos);
+            const distMS = MS.length();
+            const coneAxis = MS.clone().normalize();
+            
+            const MP = point.clone().sub(missilePos);
+            const projLength = MP.dot(coneAxis);
+            
+            if (projLength <= distMS) return false;
+            
+            const projection = coneAxis.clone().multiplyScalar(projLength);
+            const perpendicular = MP.clone().sub(projection);
+            const perpDistance = perpendicular.length();
+            
+            const tanAlpha = smokeRadius / Math.sqrt(distMS * distMS - smokeRadius * smokeRadius);
+            const coneRadiusAtPoint = tanAlpha * (projLength - distMS);
+            
+            return perpDistance <= coneRadiusAtPoint * 1.001; // 高精度容差
+        }
+
+        // ========== 优化算法 ==========
+        function startOptimization() {
+            if (optimizationState.running) return;
+            
+            optimizationState.running = true;
+            optimizationState.paused = false;
+            optimizationState.iteration = 0;
+            
+            elements.startBtn.disabled = true;
+            elements.pauseBtn.disabled = false;
+            elements.status.textContent = '优化进行中...';
+            elements.status.className = 'status running';
+            
+            addLog('开始参数优化', 'info');
+            
+            // 使用遗传算法进行优化
+            runGeneticAlgorithm();
+        }
+
+        function pauseOptimization() {
+            optimizationState.paused = !optimizationState.paused;
+            
+            if (optimizationState.paused) {
+                elements.pauseBtn.textContent = '继续优化';
+                elements.status.textContent = '优化已暂停';
+                addLog('优化已暂停', 'warning');
+            } else {
+                elements.pauseBtn.textContent = '暂停优化';
+                elements.status.textContent = '优化进行中...';
+                elements.status.className = 'status running';
+                addLog('优化已继续', 'info');
+            }
+        }
+
+        function resetOptimization() {
+            optimizationState.running = false;
+            optimizationState.paused = false;
+            optimizationState.iteration = 0;
+            
+            // 重置最佳结果
+            optimizationState.bestResult = {
+                blockTime: 0,
+                droneSpeed: 120,
+                droneDirection: 180,
+                droneInitX: 17800,
+                droneInitY: 0,
+                throwTime: 1.5,
+                fallTime: 3.6,
+                smokeRadius: 10,
+                sinkSpeed: 3
+            };
+            
+            // 重置UI
+            elements.startBtn.disabled = false;
+            elements.pauseBtn.disabled = true;
+            elements.pauseBtn.textContent = '暂停优化';
+            elements.status.textContent = '就绪';
+            elements.status.className = 'status';
+            elements.progressFill.style.width = '0%';
+            
+            // 重置参数滑块
+            elements.droneSpeed.value = 120;
+            elements.droneDirection.value = 180;
+            elements.droneInitX.value = 17800;
+            elements.droneInitY.value = 0;
+            elements.throwTime.value = 1.5;
+            elements.fallTime.value = 3.6;
+            elements.smokeRadius.value = 10;
+            elements.sinkSpeed.value = 3;
+            
+            updateParamValues();
+            updateCurrentParams();
+            updateResults();
+            
+            addLog('参数已重置', 'info');
+        }
+
+        async function runGeneticAlgorithm() {
+            const populationSize = 50;
+            const generations = 20;
+            const mutationRate = 0.1;
+            const crossoverRate = 0.8;
+            
+            // 初始化种群
+            let population = initializePopulation(populationSize);
+            
+            for (let gen = 0; gen < generations && optimizationState.running; gen++) {
+                if (optimizationState.paused) {
+                    await new Promise(resolve => {
+                        const checkPause = () => {
+                            if (!optimizationState.paused || !optimizationState.running) {
+                                resolve();
+                            } else {
+                                setTimeout(checkPause, 100);
+                            }
+                        };
+                        checkPause();
+                    });
+                }
+                
+                if (!optimizationState.running) break;
+                
+                // 评估适应度
+                const fitness = await evaluatePopulation(population);
+                
+                // 找到最佳个体
+                const bestIndex = fitness.indexOf(Math.max(...fitness));
+                const bestIndividual = population[bestIndex];
+                const bestFitness = fitness[bestIndex];
+                
+                // 更新最佳结果
+                if (bestFitness > optimizationState.bestResult.blockTime) {
+                    optimizationState.bestResult = {
+                        blockTime: bestFitness,
+                        ...bestIndividual
+                    };
+                    
+                    addLog(`发现更优解: 遮蔽时间 ${bestFitness.toFixed(3)}s`, 'info');
+                    updateResults();
+                }
+                
+                // 选择、交叉、变异
+                population = evolvePopulation(population, fitness, crossoverRate, mutationRate);
+                
+                // 更新进度
+                const progress = ((gen + 1) / generations) * 100;
+                elements.progressFill.style.width = progress + '%';
+                elements.iterationCount.textContent = (gen + 1) * populationSize;
+                
+                addLog(`第${gen + 1}代完成, 最佳适应度: ${bestFitness.toFixed(3)}s`, 'info');
+                
+                // 让出控制权
+                await new Promise(resolve => setTimeout(resolve, 10));
+            }
+            
+            // 优化完成
+            optimizationState.running = false;
+            elements.startBtn.disabled = false;
+            elements.pauseBtn.disabled = true;
+            elements.status.textContent = '优化完成';
+            elements.status.className = 'status completed';
+            
+            addLog(`优化完成! 最优遮蔽时间: ${optimizationState.bestResult.blockTime.toFixed(3)}s`, 'info');
+        }
+
+        function initializePopulation(size) {
+            const population = [];
+            
+            for (let i = 0; i < size; i++) {
+                // 生成满足约束条件的随机个体
+                population.push({
+                    droneSpeed: 70 + Math.random() * 70,        // 无人机速度: 70-140 m/s
+                    droneDirection: Math.random() * 360,        // 飞行方向: 0-360°
+                    droneInitX: 10000 + Math.random() * 15000,  // 初始X坐标: 10000-25000 m
+                    droneInitY: -5000 + Math.random() * 10000,  // 初始Y坐标: -5000-5000 m
+                    throwTime: 0.5 + Math.random() * 2.5,      // 投放时间: 0.5-3.0 s
+                    fallTime: 2.0 + Math.random() * 3.0,       // 平抛时间: 2.0-5.0 s
+                    sinkSpeed: 1 + Math.random() * 4           // 下沉速度: 1-5 m/s
+                });
+            }
+            
+            return population;
+        }
+
+        async function evaluatePopulation(population) {
+            const fitness = [];
+            
+            for (let i = 0; i < population.length; i++) {
+                const individual = population[i];
+                const blockTime = calculateBlockingTime(individual);
+                fitness.push(blockTime);
+                
+                // 每评估10个个体让出一次控制权
+                if (i % 10 === 0) {
+                    await new Promise(resolve => setTimeout(resolve, 1));
+                }
+            }
+            
+            return fitness;
+        }
+
+        function evolvePopulation(population, fitness, crossoverRate, mutationRate) {
+            const newPopulation = [];
+            const populationSize = population.length;
+            
+            // 精英保留（保留最好的10%）
+            const eliteCount = Math.floor(populationSize * 0.1);
+            const sortedIndices = fitness.map((f, i) => ({ fitness: f, index: i }))
+                .sort((a, b) => b.fitness - a.fitness)
+                .map(item => item.index);
+            
+            for (let i = 0; i < eliteCount; i++) {
+                newPopulation.push({ ...population[sortedIndices[i]] });
+            }
+            
+            // 生成剩余个体
+            while (newPopulation.length < populationSize) {
+                const parent1 = tournamentSelection(population, fitness);
+                const parent2 = tournamentSelection(population, fitness);
+                
+                let child1, child2;
+                if (Math.random() < crossoverRate) {
+                    [child1, child2] = crossover(parent1, parent2);
+                } else {
+                    child1 = { ...parent1 };
+                    child2 = { ...parent2 };
+                }
+                
+                if (Math.random() < mutationRate) {
+                    mutate(child1);
+                }
+                if (Math.random() < mutationRate) {
+                    mutate(child2);
+                }
+                
+                newPopulation.push(child1);
+                if (newPopulation.length < populationSize) {
+                    newPopulation.push(child2);
+                }
+            }
+            
+            return newPopulation.slice(0, populationSize);
+        }
+
+        function tournamentSelection(population, fitness, tournamentSize = 3) {
+            let bestIndex = Math.floor(Math.random() * population.length);
+            
+            for (let i = 1; i < tournamentSize; i++) {
+                const candidateIndex = Math.floor(Math.random() * population.length);
+                if (fitness[candidateIndex] > fitness[bestIndex]) {
+                    bestIndex = candidateIndex;
+                }
+            }
+            
+            return { ...population[bestIndex] };
+        }
+
+        function crossover(parent1, parent2) {
+            const child1 = {};
+            const child2 = {};
+            
+            const keys = Object.keys(parent1);
+            
+            for (const key of keys) {
+                if (Math.random() < 0.5) {
+                    child1[key] = parent1[key];
+                    child2[key] = parent2[key];
+                } else {
+                    child1[key] = parent2[key];
+                    child2[key] = parent1[key];
+                }
+            }
+            
+            return [child1, child2];
+        }
+
+        function mutate(individual) {
+            const keys = Object.keys(individual);
+            const mutationKey = keys[Math.floor(Math.random() * keys.length)];
+            
+            // 严格的参数约束范围
+            const ranges = {
+                droneSpeed: [70, 140],      // 无人机速度约束
+                droneDirection: [0, 360],   // 飞行方向约束
+                droneInitX: [10000, 25000], // X坐标约束
+                droneInitY: [-5000, 5000],  // Y坐标约束
+                throwTime: [0.5, 3.0],      // 投放时间约束
+                fallTime: [2.0, 5.0],       // 平抛时间约束
+                sinkSpeed: [1, 5]           // 下沉速度约束
+            };
+            
+            const [min, max] = ranges[mutationKey];
+            const mutationStrength = 0.1; // 10%的自适应变异强度
+            const currentValue = individual[mutationKey];
+            const range = max - min;
+            const mutation = (Math.random() - 0.5) * range * mutationStrength;
+            
+            // 确保变异后的值仍在约束范围内
+            individual[mutationKey] = Math.max(min, Math.min(max, currentValue + mutation));
+        }
+
+        // ========== UI 更新函数 ==========
+        function calculateCurrentBlockTime() {
+            const blockTime = calculateBlockingTime(optimizationState.currentParams);
+            elements.currentBlockTime.textContent = blockTime.toFixed(3) + ' s';
+        }
+
+        function updateResults() {
+            const best = optimizationState.bestResult;
+            
+            elements.maxBlockTime.textContent = best.blockTime.toFixed(3) + ' s';
+            elements.optimalDroneSpeed.textContent = best.droneSpeed.toFixed(1) + ' m/s';
+            elements.optimalDirection.textContent = best.droneDirection.toFixed(1) + '°';
+            elements.optimalThrowTime.textContent = best.throwTime.toFixed(2) + ' s';
+            elements.optimalBoomTime.textContent = (best.throwTime + best.fallTime).toFixed(2) + ' s';
+        }
+
+        function addLog(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry ${type}`;
+            logEntry.textContent = `[${timestamp}] ${message}`;
+            
+            elements.log.appendChild(logEntry);
+            elements.log.scrollTop = elements.log.scrollHeight;
+            
+            // 限制日志条数
+            while (elements.log.children.length > 100) {
+                elements.log.removeChild(elements.log.firstChild);
+            }
+        }
+
+        function exportResults() {
+            const results = {
+                timestamp: new Date().toISOString(),
+                bestResult: optimizationState.bestResult,
+                currentParams: optimizationState.currentParams,
+                iterations: optimizationState.iteration,
+                algorithm: '超高精度遗传算法优化'
+            };
+            
+            const dataStr = JSON.stringify(results, null, 2);
+            const dataBlob = new Blob([dataStr], { type: 'application/json' });
+            
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(dataBlob);
+            link.download = `optimization_results_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.json`;
+            link.click();
+            
+            addLog('结果已导出', 'info');
+        }
+
+        // ========== 启动应用 ==========
+        init();
+    </script>
+</body>
+
+</html>

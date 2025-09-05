@@ -373,25 +373,25 @@
             if (!state.running) return;
             const now = performance.now();
             // 使用超精细自适应时间步长
-             const baseDt = (now - state.lastFrameMs) / 1000;
-             
-             // 多层次时间精度控制
-             let adaptiveDt;
-             const isCriticalPeriod = (state.time >= t_throw && state.time <= t_boom + 2);
-             const isNearCritical = (state.time >= t_throw - 0.2 && state.time <= t_boom + 2.5);
-             const isTransition = (state.time >= t_throw - 0.5 && state.time <= t_boom + 3);
-             
-             if (isCriticalPeriod) {
-                 adaptiveDt = Math.min(0.0005, baseDt); // 极小步长：0.5ms
-             } else if (isNearCritical) {
-                 adaptiveDt = Math.min(0.001, baseDt);  // 小步长：1ms
-             } else if (isTransition) {
-                 adaptiveDt = Math.min(0.002, baseDt);  // 中等步长：2ms
-             } else {
-                 adaptiveDt = Math.min(0.004, baseDt);  // 标准步长：4ms
-             }
-             
-             const dt = adaptiveDt * state.speed;
+            const baseDt = (now - state.lastFrameMs) / 1000;
+
+            // 多层次时间精度控制
+            let adaptiveDt;
+            const isCriticalPeriod = (state.time >= t_throw && state.time <= t_boom + 2);
+            const isNearCritical = (state.time >= t_throw - 0.2 && state.time <= t_boom + 2.5);
+            const isTransition = (state.time >= t_throw - 0.5 && state.time <= t_boom + 3);
+
+            if (isCriticalPeriod) {
+                adaptiveDt = Math.min(0.0005, baseDt); // 极小步长：0.5ms
+            } else if (isNearCritical) {
+                adaptiveDt = Math.min(0.001, baseDt);  // 小步长：1ms
+            } else if (isTransition) {
+                adaptiveDt = Math.min(0.002, baseDt);  // 中等步长：2ms
+            } else {
+                adaptiveDt = Math.min(0.004, baseDt);  // 标准步长：4ms
+            }
+
+            const dt = adaptiveDt * state.speed;
             state.lastFrameMs = now;
             state.time += dt;
 
@@ -485,383 +485,383 @@
         function isCylinderInShadowCone(missilePos, smokeCenter, smokeRadius) {
             const MS = smokeCenter.clone().sub(missilePos);
             const distMS = MS.length();
-            
+
             // 如果导弹在烟雾球内部，无法形成阴影锥
             if (distMS <= smokeRadius) return false;
-            
+
             // 计算切线圆锥的半顶角
             const sinAlpha = smokeRadius / distMS;
             const cosAlpha = Math.sqrt(1 - sinAlpha * sinAlpha);
             const tanAlpha = sinAlpha / cosAlpha;
-            
+
             // 圆锥轴向量（从导弹指向烟雾球中心）
             const coneAxis = MS.clone().normalize();
-            
+
             // 圆柱体几何参数
             const cylinderCenter = B_CENTER;
             const cylinderRadius = B_RADIUS;
             const cylinderHeight = B_HEIGHT;
-            
+
             // 更密集的采样点检测
             const samplingPoints = [];
-            
+
             // 超密集采样策略 - 大幅提升精度
-             
-             // 1. 圆柱体轴线上的超密集采样（从底到顶）
-             for (let h = 0; h <= 1; h += 0.02) { // 从0.1改为0.02，增加5倍密度
-                 const z = cylinderCenter.z - cylinderHeight/2 + h * cylinderHeight;
-                 samplingPoints.push(new THREE.Vector3(cylinderCenter.x, cylinderCenter.y, z));
-             }
-             
-             // 2. 圆柱体表面的超密集采样（每层多个角度）
-             for (let h = 0; h <= 1; h += 0.05) { // 从0.2改为0.05，增加4倍密度
-                 const z = cylinderCenter.z - cylinderHeight/2 + h * cylinderHeight;
-                 for (let angle = 0; angle < 2 * Math.PI; angle += Math.PI / 24) { // 从π/8改为π/24，增加3倍密度
-                     const x = cylinderCenter.x + cylinderRadius * Math.cos(angle);
-                     const y = cylinderCenter.y + cylinderRadius * Math.sin(angle);
-                     samplingPoints.push(new THREE.Vector3(x, y, z));
-                 }
-             }
-             
-             // 3. 圆柱体内部的超密集采样（多层多半径）
-             for (let h = 0.1; h <= 0.9; h += 0.1) { // 更密集的高度采样
-                 const z = cylinderCenter.z - cylinderHeight/2 + h * cylinderHeight;
-                 for (let r = 0.1; r <= 0.95; r += 0.15) { // 更密集的半径采样
-                     const radius = r * cylinderRadius;
-                     for (let angle = 0; angle < 2 * Math.PI; angle += Math.PI / 12) { // 更密集的角度采样
-                         const x = cylinderCenter.x + radius * Math.cos(angle);
-                         const y = cylinderCenter.y + radius * Math.sin(angle);
-                         samplingPoints.push(new THREE.Vector3(x, y, z));
-                     }
-                 }
-             }
-             
-             // 4. 新增：圆柱体边缘的特殊采样（提高边界检测精度）
-             for (let h = 0; h <= 1; h += 0.02) {
-                 const z = cylinderCenter.z - cylinderHeight/2 + h * cylinderHeight;
-                 for (let angle = 0; angle < 2 * Math.PI; angle += Math.PI / 36) { // 极密集角度采样
-                     // 在半径0.95-1.0之间密集采样
-                     for (let rFactor = 0.95; rFactor <= 1.0; rFactor += 0.025) {
-                         const radius = rFactor * cylinderRadius;
-                         const x = cylinderCenter.x + radius * Math.cos(angle);
-                         const y = cylinderCenter.y + radius * Math.sin(angle);
-                         samplingPoints.push(new THREE.Vector3(x, y, z));
-                     }
-                 }
-             }
-            
+
+            // 1. 圆柱体轴线上的超密集采样（从底到顶）
+            for (let h = 0; h <= 1; h += 0.02) { // 从0.1改为0.02，增加5倍密度
+                const z = cylinderCenter.z - cylinderHeight / 2 + h * cylinderHeight;
+                samplingPoints.push(new THREE.Vector3(cylinderCenter.x, cylinderCenter.y, z));
+            }
+
+            // 2. 圆柱体表面的超密集采样（每层多个角度）
+            for (let h = 0; h <= 1; h += 0.05) { // 从0.2改为0.05，增加4倍密度
+                const z = cylinderCenter.z - cylinderHeight / 2 + h * cylinderHeight;
+                for (let angle = 0; angle < 2 * Math.PI; angle += Math.PI / 24) { // 从π/8改为π/24，增加3倍密度
+                    const x = cylinderCenter.x + cylinderRadius * Math.cos(angle);
+                    const y = cylinderCenter.y + cylinderRadius * Math.sin(angle);
+                    samplingPoints.push(new THREE.Vector3(x, y, z));
+                }
+            }
+
+            // 3. 圆柱体内部的超密集采样（多层多半径）
+            for (let h = 0.1; h <= 0.9; h += 0.1) { // 更密集的高度采样
+                const z = cylinderCenter.z - cylinderHeight / 2 + h * cylinderHeight;
+                for (let r = 0.1; r <= 0.95; r += 0.15) { // 更密集的半径采样
+                    const radius = r * cylinderRadius;
+                    for (let angle = 0; angle < 2 * Math.PI; angle += Math.PI / 12) { // 更密集的角度采样
+                        const x = cylinderCenter.x + radius * Math.cos(angle);
+                        const y = cylinderCenter.y + radius * Math.sin(angle);
+                        samplingPoints.push(new THREE.Vector3(x, y, z));
+                    }
+                }
+            }
+
+            // 4. 新增：圆柱体边缘的特殊采样（提高边界检测精度）
+            for (let h = 0; h <= 1; h += 0.02) {
+                const z = cylinderCenter.z - cylinderHeight / 2 + h * cylinderHeight;
+                for (let angle = 0; angle < 2 * Math.PI; angle += Math.PI / 36) { // 极密集角度采样
+                    // 在半径0.95-1.0之间密集采样
+                    for (let rFactor = 0.95; rFactor <= 1.0; rFactor += 0.025) {
+                        const radius = rFactor * cylinderRadius;
+                        const x = cylinderCenter.x + radius * Math.cos(angle);
+                        const y = cylinderCenter.y + radius * Math.sin(angle);
+                        samplingPoints.push(new THREE.Vector3(x, y, z));
+                    }
+                }
+            }
+
             // 检查采样点是否在阴影圆锥内
-             let pointsInShadow = 0;
-             const totalPoints = samplingPoints.length;
-             
-             for (const point of samplingPoints) {
-                 if (isPointInShadowCone(point, missilePos, smokeCenter, smokeRadius, coneAxis, cosAlpha, tanAlpha, distMS)) {
-                     pointsInShadow++;
-                 }
-             }
-             
-             // 计算遮蔽比例
-             const shadowRatio = pointsInShadow / totalPoints;
-             
-             // 同时进行解析几何验证以提高精度
-             const analyticalResult = analyticalConeIntersection(missilePos, smokeCenter, smokeRadius, cylinderCenter, cylinderRadius, cylinderHeight);
-             
-             // 更新全局状态以供信息显示
-             state.lastSamplingPoints = totalPoints;
-             state.lastShadowRatio = shadowRatio;
-             
-             // 超敏感阈值设置
-             const primaryThreshold = 0.12; // 主阈值进一步降低
-             const samplingResult = shadowRatio > primaryThreshold;
-             
-             // 多层次精确验证
-             let extraPrecisionResult = false;
-             let boundaryResult = false;
-             
-             // 边界敏感区域验证（阈值附近）
-             if (shadowRatio > 0.08 && shadowRatio < 0.18) {
-                 extraPrecisionResult = performExtraPrecisionCheck(missilePos, smokeCenter, smokeRadius, cylinderCenter, cylinderRadius, cylinderHeight);
-             }
-             
-             // 极边界情况特殊处理
-             if (shadowRatio > 0.05 && shadowRatio < 0.25) {
-                 boundaryResult = performBoundaryAnalysis(missilePos, smokeCenter, smokeRadius, cylinderCenter, cylinderRadius, cylinderHeight, shadowRatio);
-             }
-             
-             return samplingResult || analyticalResult || extraPrecisionResult || boundaryResult;
+            let pointsInShadow = 0;
+            const totalPoints = samplingPoints.length;
+
+            for (const point of samplingPoints) {
+                if (isPointInShadowCone(point, missilePos, smokeCenter, smokeRadius, coneAxis, cosAlpha, tanAlpha, distMS)) {
+                    pointsInShadow++;
+                }
+            }
+
+            // 计算遮蔽比例
+            const shadowRatio = pointsInShadow / totalPoints;
+
+            // 同时进行解析几何验证以提高精度
+            const analyticalResult = analyticalConeIntersection(missilePos, smokeCenter, smokeRadius, cylinderCenter, cylinderRadius, cylinderHeight);
+
+            // 更新全局状态以供信息显示
+            state.lastSamplingPoints = totalPoints;
+            state.lastShadowRatio = shadowRatio;
+
+            // 超敏感阈值设置
+            const primaryThreshold = 0.12; // 主阈值进一步降低
+            const samplingResult = shadowRatio > primaryThreshold;
+
+            // 多层次精确验证
+            let extraPrecisionResult = false;
+            let boundaryResult = false;
+
+            // 边界敏感区域验证（阈值附近）
+            if (shadowRatio > 0.08 && shadowRatio < 0.18) {
+                extraPrecisionResult = performExtraPrecisionCheck(missilePos, smokeCenter, smokeRadius, cylinderCenter, cylinderRadius, cylinderHeight);
+            }
+
+            // 极边界情况特殊处理
+            if (shadowRatio > 0.05 && shadowRatio < 0.25) {
+                boundaryResult = performBoundaryAnalysis(missilePos, smokeCenter, smokeRadius, cylinderCenter, cylinderRadius, cylinderHeight, shadowRatio);
+            }
+
+            return samplingResult || analyticalResult || extraPrecisionResult || boundaryResult;
         }
-        
+
         // 精确判断单个点是否在阴影圆锥内
         function isPointInShadowCone(point, missilePos, smokeCenter, smokeRadius, coneAxis, cosAlpha, tanAlpha, distMS) {
             const MP = point.clone().sub(missilePos);
             const distMP = MP.length();
-            
+
             if (distMP < 1e-6) return false;
-            
+
             // 计算点到圆锥轴的投影长度
             const projectionLength = MP.dot(coneAxis);
-            
+
             // 点必须在烟雾球后方才可能被遮蔽
             if (projectionLength <= distMS) return false;
-            
+
             // 计算点到圆锥轴的垂直距离
             const projection = coneAxis.clone().multiplyScalar(projectionLength);
             const perpendicular = MP.clone().sub(projection);
             const perpDistance = perpendicular.length();
-            
+
             // 计算在该投影距离处圆锥的半径
             const distanceFromSmokeCenter = projectionLength - distMS;
             const coneRadiusAtPoint = distanceFromSmokeCenter * tanAlpha;
-            
+
             // 添加小的容差以提高数值稳定性
-              const tolerance = 0.05; // 减小容差以提高精度
-              return perpDistance <= (coneRadiusAtPoint + tolerance);
-          }
-          
-          // 超高精度验证：蒙特卡洛方法 + 微分几何
-          function performExtraPrecisionCheck(missilePos, smokeCenter, smokeRadius, cylinderCenter, cylinderRadius, cylinderHeight) {
-              // 蒙特卡洛随机采样验证
-              const monteCarloSamples = 5000; // 大量随机采样
-              let shadowCount = 0;
-              
-              for (let i = 0; i < monteCarloSamples; i++) {
-                  // 在圆柱体内随机生成点
-                  const theta = Math.random() * 2 * Math.PI;
-                  const r = Math.sqrt(Math.random()) * cylinderRadius; // 均匀分布
-                  const h = Math.random();
-                  
-                  const x = cylinderCenter.x + r * Math.cos(theta);
-                  const y = cylinderCenter.y + r * Math.sin(theta);
-                  const z = cylinderCenter.z - cylinderHeight/2 + h * cylinderHeight;
-                  
-                  const point = new THREE.Vector3(x, y, z);
-                  
-                  if (isPointInShadowConeHighPrecision(point, missilePos, smokeCenter, smokeRadius)) {
-                      shadowCount++;
-                  }
-              }
-              
-              const monteCarloRatio = shadowCount / monteCarloSamples;
-              
-              // 微分几何精确计算
-              const differentialResult = differentialGeometryIntersection(missilePos, smokeCenter, smokeRadius, cylinderCenter, cylinderRadius, cylinderHeight);
-              
-              return (monteCarloRatio > 0.12) || differentialResult;
-          }
-          
-          // 高精度点-圆锥相交判定
-          function isPointInShadowConeHighPrecision(point, missilePos, smokeCenter, smokeRadius) {
-              const MS = smokeCenter.clone().sub(missilePos);
-              const distMS = MS.length();
-              
-              if (distMS <= smokeRadius) return false;
-              
-              const MP = point.clone().sub(missilePos);
-              const coneAxis = MS.clone().normalize();
-              
-              // 使用高精度三角函数计算
-              const sinAlpha = smokeRadius / distMS;
-              const cosAlpha = Math.sqrt(1 - sinAlpha * sinAlpha);
-              
-              const projLength = MP.dot(coneAxis);
-              if (projLength <= distMS) return false;
-              
-              const projection = coneAxis.clone().multiplyScalar(projLength);
-              const perpendicular = MP.clone().sub(projection);
-              const perpDistance = perpendicular.length();
-              
-              const distanceFromSmoke = projLength - distMS;
-              const coneRadius = distanceFromSmoke * (sinAlpha / cosAlpha);
-              
-              // 使用更严格的判定条件
-              return perpDistance <= coneRadius * 1.001; // 极小容差
-          }
-          
-          // 微分几何精确相交计算
-          function differentialGeometryIntersection(missilePos, smokeCenter, smokeRadius, cylinderCenter, cylinderRadius, cylinderHeight) {
-              // 使用参数方程精确计算圆锥与圆柱体的相交
-              const MS = smokeCenter.clone().sub(missilePos);
-              const distMS = MS.length();
-              
-              if (distMS <= smokeRadius) return false;
-              
-              const coneAxis = MS.clone().normalize();
-              const tanAlpha = smokeRadius / Math.sqrt(distMS * distMS - smokeRadius * smokeRadius);
-              
-              // 检查圆柱体生成线与圆锥的相交
-              const numGenerators = 72; // 圆柱体生成线数量
-              
-              for (let i = 0; i < numGenerators; i++) {
-                  const theta = (2 * Math.PI * i) / numGenerators;
-                  const dirX = Math.cos(theta);
-                  const dirY = Math.sin(theta);
-                  
-                  // 圆柱体生成线：P(t) = center + radius*(dirX, dirY, 0) + t*(0, 0, height)
-                  const lineStart = new THREE.Vector3(
-                      cylinderCenter.x + cylinderRadius * dirX,
-                      cylinderCenter.y + cylinderRadius * dirY,
-                      cylinderCenter.z - cylinderHeight/2
-                  );
-                  
-                  const lineEnd = new THREE.Vector3(
-                      cylinderCenter.x + cylinderRadius * dirX,
-                      cylinderCenter.y + cylinderRadius * dirY,
-                      cylinderCenter.z + cylinderHeight/2
-                  );
-                  
-                  // 检查线段与圆锥的相交
-                  if (lineIntersectsCone(lineStart, lineEnd, missilePos, coneAxis, tanAlpha, distMS)) {
-                      return true;
-                  }
-              }
-              
-              return false;
-          }
-          
-          // 边界条件特殊分析
-          function performBoundaryAnalysis(missilePos, smokeCenter, smokeRadius, cylinderCenter, cylinderRadius, cylinderHeight, currentRatio) {
-              // 基于当前比例的动态阈值调整
-              const dynamicThreshold = 0.08 + (currentRatio * 0.3); // 动态调整
-              
-              // 几何距离分析
-              const MS = smokeCenter.clone().sub(missilePos);
-              const MC = cylinderCenter.clone().sub(missilePos);
-              const SC = cylinderCenter.clone().sub(smokeCenter);
-              
-              const distMS = MS.length();
-              const distMC = MC.length();
-              const distSC = SC.length();
-              
-              // 如果圆柱体非常接近阴影锥的边界
-              const coneAngle = Math.asin(smokeRadius / distMS);
-              const cylinderAngle = Math.atan(cylinderRadius / distMC);
-              
-              // 角度接近性判定
-              const angleProximity = Math.abs(coneAngle - cylinderAngle) < 0.1;
-              
-              // 距离接近性判定
-              const distanceProximity = distSC < (smokeRadius + cylinderRadius) * 2;
-              
-              // 综合边界判定
-              const boundaryCondition = (angleProximity || distanceProximity) && currentRatio > 0.06;
-              
-              return boundaryCondition;
-          }
-          
-          // 线段与圆锥相交判定
-          function lineIntersectsCone(lineStart, lineEnd, coneApex, coneAxis, tanAlpha, smokeDistance) {
-              const numSamples = 50; // 线段采样点数
-              
-              for (let i = 0; i <= numSamples; i++) {
-                  const t = i / numSamples;
-                  const point = lineStart.clone().lerp(lineEnd, t);
-                  
-                  const AP = point.clone().sub(coneApex);
-                  const projLength = AP.dot(coneAxis);
-                  
-                  if (projLength > smokeDistance) {
-                      const projection = coneAxis.clone().multiplyScalar(projLength);
-                      const perpendicular = AP.clone().sub(projection);
-                      const perpDistance = perpendicular.length();
-                      
-                      const coneRadius = (projLength - smokeDistance) * tanAlpha;
-                      
-                      if (perpDistance <= coneRadius) {
-                          return true;
-                      }
-                  }
-              }
-              
-              return false;
-          }
-         
-         // 解析几何方法：精确计算圆锥与圆柱体的相交
-         function analyticalConeIntersection(missilePos, smokeCenter, smokeRadius, cylinderCenter, cylinderRadius, cylinderHeight) {
-             const MS = smokeCenter.clone().sub(missilePos);
-             const distMS = MS.length();
-             
-             if (distMS <= smokeRadius) return false;
-             
-             // 圆锥参数
-             const sinAlpha = smokeRadius / distMS;
-             const cosAlpha = Math.sqrt(1 - sinAlpha * sinAlpha);
-             const tanAlpha = sinAlpha / cosAlpha;
-             
-             // 圆锥轴向量
-             const coneAxis = MS.clone().normalize();
-             
-             // 圆柱体的上下底面中心
-             const bottomCenter = new THREE.Vector3(cylinderCenter.x, cylinderCenter.y, cylinderCenter.z - cylinderHeight/2);
-             const topCenter = new THREE.Vector3(cylinderCenter.x, cylinderCenter.y, cylinderCenter.z + cylinderHeight/2);
-             
-             // 检查圆柱体轴线是否与圆锥相交
-             const cylinderAxis = topCenter.clone().sub(bottomCenter).normalize();
-             
-             // 计算圆柱体底面到导弹的向量
-             const MB = bottomCenter.clone().sub(missilePos);
-             const MT = topCenter.clone().sub(missilePos);
-             
-             // 检查圆柱体的两个底面圆是否与圆锥相交
-             const bottomIntersects = circleIntersectsCone(bottomCenter, cylinderRadius, new THREE.Vector3(0, 0, -1), missilePos, coneAxis, tanAlpha, distMS);
-             const topIntersects = circleIntersectsCone(topCenter, cylinderRadius, new THREE.Vector3(0, 0, 1), missilePos, coneAxis, tanAlpha, distMS);
-             
-             if (bottomIntersects || topIntersects) return true;
-             
-             // 检查圆柱体侧面是否与圆锥相交
-             // 参数化圆柱体侧面：P(θ,z) = (cx + r*cos(θ), cy + r*sin(θ), z)
-             // 其中 z ∈ [cz-h/2, cz+h/2], θ ∈ [0, 2π]
-             
-             const numSamples = 32; // 角度采样数
-             const heightSamples = 16; // 高度采样数
-             
-             for (let i = 0; i < numSamples; i++) {
-                 const theta = (2 * Math.PI * i) / numSamples;
-                 const x = cylinderCenter.x + cylinderRadius * Math.cos(theta);
-                 const y = cylinderCenter.y + cylinderRadius * Math.sin(theta);
-                 
-                 for (let j = 0; j <= heightSamples; j++) {
-                     const z = cylinderCenter.z - cylinderHeight/2 + (j * cylinderHeight) / heightSamples;
-                     const point = new THREE.Vector3(x, y, z);
-                     
-                     const MP = point.clone().sub(missilePos);
-                     const projLength = MP.dot(coneAxis);
-                     
-                     if (projLength > distMS) {
-                         const projection = coneAxis.clone().multiplyScalar(projLength);
-                         const perpendicular = MP.clone().sub(projection);
-                         const perpDistance = perpendicular.length();
-                         const coneRadiusAtPoint = (projLength - distMS) * tanAlpha;
-                         
-                         if (perpDistance <= coneRadiusAtPoint + 0.05) {
-                             return true;
-                         }
-                     }
-                 }
-             }
-             
-             return false;
-         }
-         
-         // 检查圆与圆锥的相交
-         function circleIntersectsCone(circleCenter, circleRadius, circleNormal, coneApex, coneAxis, tanAlpha, smokeDistance) {
-             const AC = circleCenter.clone().sub(coneApex);
-             const projLength = AC.dot(coneAxis);
-             
-             // 圆必须在烟雾球后方
-             if (projLength <= smokeDistance) return false;
-             
-             const projection = coneAxis.clone().multiplyScalar(projLength);
-             const perpendicular = AC.clone().sub(projection);
-             const perpDistance = perpendicular.length();
-             
-             const coneRadiusAtCircle = (projLength - smokeDistance) * tanAlpha;
-             
-             // 检查圆心到圆锥轴的距离
-             const distanceToAxis = perpDistance;
-             
-             // 如果圆心在圆锥内，或者圆与圆锥边界相交
-             return (distanceToAxis <= coneRadiusAtCircle + circleRadius);
-         }
+            const tolerance = 0.05; // 减小容差以提高精度
+            return perpDistance <= (coneRadiusAtPoint + tolerance);
+        }
+
+        // 超高精度验证：蒙特卡洛方法 + 微分几何
+        function performExtraPrecisionCheck(missilePos, smokeCenter, smokeRadius, cylinderCenter, cylinderRadius, cylinderHeight) {
+            // 蒙特卡洛随机采样验证
+            const monteCarloSamples = 5000; // 大量随机采样
+            let shadowCount = 0;
+
+            for (let i = 0; i < monteCarloSamples; i++) {
+                // 在圆柱体内随机生成点
+                const theta = Math.random() * 2 * Math.PI;
+                const r = Math.sqrt(Math.random()) * cylinderRadius; // 均匀分布
+                const h = Math.random();
+
+                const x = cylinderCenter.x + r * Math.cos(theta);
+                const y = cylinderCenter.y + r * Math.sin(theta);
+                const z = cylinderCenter.z - cylinderHeight / 2 + h * cylinderHeight;
+
+                const point = new THREE.Vector3(x, y, z);
+
+                if (isPointInShadowConeHighPrecision(point, missilePos, smokeCenter, smokeRadius)) {
+                    shadowCount++;
+                }
+            }
+
+            const monteCarloRatio = shadowCount / monteCarloSamples;
+
+            // 微分几何精确计算
+            const differentialResult = differentialGeometryIntersection(missilePos, smokeCenter, smokeRadius, cylinderCenter, cylinderRadius, cylinderHeight);
+
+            return (monteCarloRatio > 0.12) || differentialResult;
+        }
+
+        // 高精度点-圆锥相交判定
+        function isPointInShadowConeHighPrecision(point, missilePos, smokeCenter, smokeRadius) {
+            const MS = smokeCenter.clone().sub(missilePos);
+            const distMS = MS.length();
+
+            if (distMS <= smokeRadius) return false;
+
+            const MP = point.clone().sub(missilePos);
+            const coneAxis = MS.clone().normalize();
+
+            // 使用高精度三角函数计算
+            const sinAlpha = smokeRadius / distMS;
+            const cosAlpha = Math.sqrt(1 - sinAlpha * sinAlpha);
+
+            const projLength = MP.dot(coneAxis);
+            if (projLength <= distMS) return false;
+
+            const projection = coneAxis.clone().multiplyScalar(projLength);
+            const perpendicular = MP.clone().sub(projection);
+            const perpDistance = perpendicular.length();
+
+            const distanceFromSmoke = projLength - distMS;
+            const coneRadius = distanceFromSmoke * (sinAlpha / cosAlpha);
+
+            // 使用更严格的判定条件
+            return perpDistance <= coneRadius * 1.001; // 极小容差
+        }
+
+        // 微分几何精确相交计算
+        function differentialGeometryIntersection(missilePos, smokeCenter, smokeRadius, cylinderCenter, cylinderRadius, cylinderHeight) {
+            // 使用参数方程精确计算圆锥与圆柱体的相交
+            const MS = smokeCenter.clone().sub(missilePos);
+            const distMS = MS.length();
+
+            if (distMS <= smokeRadius) return false;
+
+            const coneAxis = MS.clone().normalize();
+            const tanAlpha = smokeRadius / Math.sqrt(distMS * distMS - smokeRadius * smokeRadius);
+
+            // 检查圆柱体生成线与圆锥的相交
+            const numGenerators = 72; // 圆柱体生成线数量
+
+            for (let i = 0; i < numGenerators; i++) {
+                const theta = (2 * Math.PI * i) / numGenerators;
+                const dirX = Math.cos(theta);
+                const dirY = Math.sin(theta);
+
+                // 圆柱体生成线：P(t) = center + radius*(dirX, dirY, 0) + t*(0, 0, height)
+                const lineStart = new THREE.Vector3(
+                    cylinderCenter.x + cylinderRadius * dirX,
+                    cylinderCenter.y + cylinderRadius * dirY,
+                    cylinderCenter.z - cylinderHeight / 2
+                );
+
+                const lineEnd = new THREE.Vector3(
+                    cylinderCenter.x + cylinderRadius * dirX,
+                    cylinderCenter.y + cylinderRadius * dirY,
+                    cylinderCenter.z + cylinderHeight / 2
+                );
+
+                // 检查线段与圆锥的相交
+                if (lineIntersectsCone(lineStart, lineEnd, missilePos, coneAxis, tanAlpha, distMS)) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        // 边界条件特殊分析
+        function performBoundaryAnalysis(missilePos, smokeCenter, smokeRadius, cylinderCenter, cylinderRadius, cylinderHeight, currentRatio) {
+            // 基于当前比例的动态阈值调整
+            const dynamicThreshold = 0.08 + (currentRatio * 0.3); // 动态调整
+
+            // 几何距离分析
+            const MS = smokeCenter.clone().sub(missilePos);
+            const MC = cylinderCenter.clone().sub(missilePos);
+            const SC = cylinderCenter.clone().sub(smokeCenter);
+
+            const distMS = MS.length();
+            const distMC = MC.length();
+            const distSC = SC.length();
+
+            // 如果圆柱体非常接近阴影锥的边界
+            const coneAngle = Math.asin(smokeRadius / distMS);
+            const cylinderAngle = Math.atan(cylinderRadius / distMC);
+
+            // 角度接近性判定
+            const angleProximity = Math.abs(coneAngle - cylinderAngle) < 0.1;
+
+            // 距离接近性判定
+            const distanceProximity = distSC < (smokeRadius + cylinderRadius) * 2;
+
+            // 综合边界判定
+            const boundaryCondition = (angleProximity || distanceProximity) && currentRatio > 0.06;
+
+            return boundaryCondition;
+        }
+
+        // 线段与圆锥相交判定
+        function lineIntersectsCone(lineStart, lineEnd, coneApex, coneAxis, tanAlpha, smokeDistance) {
+            const numSamples = 50; // 线段采样点数
+
+            for (let i = 0; i <= numSamples; i++) {
+                const t = i / numSamples;
+                const point = lineStart.clone().lerp(lineEnd, t);
+
+                const AP = point.clone().sub(coneApex);
+                const projLength = AP.dot(coneAxis);
+
+                if (projLength > smokeDistance) {
+                    const projection = coneAxis.clone().multiplyScalar(projLength);
+                    const perpendicular = AP.clone().sub(projection);
+                    const perpDistance = perpendicular.length();
+
+                    const coneRadius = (projLength - smokeDistance) * tanAlpha;
+
+                    if (perpDistance <= coneRadius) {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        // 解析几何方法：精确计算圆锥与圆柱体的相交
+        function analyticalConeIntersection(missilePos, smokeCenter, smokeRadius, cylinderCenter, cylinderRadius, cylinderHeight) {
+            const MS = smokeCenter.clone().sub(missilePos);
+            const distMS = MS.length();
+
+            if (distMS <= smokeRadius) return false;
+
+            // 圆锥参数
+            const sinAlpha = smokeRadius / distMS;
+            const cosAlpha = Math.sqrt(1 - sinAlpha * sinAlpha);
+            const tanAlpha = sinAlpha / cosAlpha;
+
+            // 圆锥轴向量
+            const coneAxis = MS.clone().normalize();
+
+            // 圆柱体的上下底面中心
+            const bottomCenter = new THREE.Vector3(cylinderCenter.x, cylinderCenter.y, cylinderCenter.z - cylinderHeight / 2);
+            const topCenter = new THREE.Vector3(cylinderCenter.x, cylinderCenter.y, cylinderCenter.z + cylinderHeight / 2);
+
+            // 检查圆柱体轴线是否与圆锥相交
+            const cylinderAxis = topCenter.clone().sub(bottomCenter).normalize();
+
+            // 计算圆柱体底面到导弹的向量
+            const MB = bottomCenter.clone().sub(missilePos);
+            const MT = topCenter.clone().sub(missilePos);
+
+            // 检查圆柱体的两个底面圆是否与圆锥相交
+            const bottomIntersects = circleIntersectsCone(bottomCenter, cylinderRadius, new THREE.Vector3(0, 0, -1), missilePos, coneAxis, tanAlpha, distMS);
+            const topIntersects = circleIntersectsCone(topCenter, cylinderRadius, new THREE.Vector3(0, 0, 1), missilePos, coneAxis, tanAlpha, distMS);
+
+            if (bottomIntersects || topIntersects) return true;
+
+            // 检查圆柱体侧面是否与圆锥相交
+            // 参数化圆柱体侧面：P(θ,z) = (cx + r*cos(θ), cy + r*sin(θ), z)
+            // 其中 z ∈ [cz-h/2, cz+h/2], θ ∈ [0, 2π]
+
+            const numSamples = 32; // 角度采样数
+            const heightSamples = 16; // 高度采样数
+
+            for (let i = 0; i < numSamples; i++) {
+                const theta = (2 * Math.PI * i) / numSamples;
+                const x = cylinderCenter.x + cylinderRadius * Math.cos(theta);
+                const y = cylinderCenter.y + cylinderRadius * Math.sin(theta);
+
+                for (let j = 0; j <= heightSamples; j++) {
+                    const z = cylinderCenter.z - cylinderHeight / 2 + (j * cylinderHeight) / heightSamples;
+                    const point = new THREE.Vector3(x, y, z);
+
+                    const MP = point.clone().sub(missilePos);
+                    const projLength = MP.dot(coneAxis);
+
+                    if (projLength > distMS) {
+                        const projection = coneAxis.clone().multiplyScalar(projLength);
+                        const perpendicular = MP.clone().sub(projection);
+                        const perpDistance = perpendicular.length();
+                        const coneRadiusAtPoint = (projLength - distMS) * tanAlpha;
+
+                        if (perpDistance <= coneRadiusAtPoint + 0.05) {
+                            return true;
+                        }
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        // 检查圆与圆锥的相交
+        function circleIntersectsCone(circleCenter, circleRadius, circleNormal, coneApex, coneAxis, tanAlpha, smokeDistance) {
+            const AC = circleCenter.clone().sub(coneApex);
+            const projLength = AC.dot(coneAxis);
+
+            // 圆必须在烟雾球后方
+            if (projLength <= smokeDistance) return false;
+
+            const projection = coneAxis.clone().multiplyScalar(projLength);
+            const perpendicular = AC.clone().sub(projection);
+            const perpDistance = perpendicular.length();
+
+            const coneRadiusAtCircle = (projLength - smokeDistance) * tanAlpha;
+
+            // 检查圆心到圆锥轴的距离
+            const distanceToAxis = perpDistance;
+
+            // 如果圆心在圆锥内，或者圆与圆锥边界相交
+            return (distanceToAxis <= coneRadiusAtCircle + circleRadius);
+        }
 
         // 可视化：从 M 指向 S 的切线圆锥（半顶角 alpha 满足 sin(alpha)=r/L）
         function drawShadowCone(M, S, r) {
@@ -918,7 +918,7 @@
             if (state.tOn !== null) document.getElementById('blockStart').textContent = state.tOn.toFixed(3);
             if (state.tOff !== null) document.getElementById('blockEnd').textContent = state.tOff.toFixed(3);
             if (state.tOn !== null && state.tOff !== null) document.getElementById('totalBlockTime').textContent = (state.tOff - state.tOn).toFixed(3);
-            
+
             // 更新精度指标
             document.getElementById('samplingPoints').textContent = state.lastSamplingPoints;
             document.getElementById('shadowRatio').textContent = (state.lastShadowRatio * 100).toFixed(1);
