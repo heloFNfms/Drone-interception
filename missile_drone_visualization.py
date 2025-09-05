@@ -15,13 +15,37 @@ plt.rcParams['figure.dpi'] = 150
 plt.rcParams['savefig.dpi'] = 300
 
 # 创建图形（更大尺寸，更好效果，启用交互功能）
-fig = plt.figure(figsize=(18, 14))
+# 设置全屏大小的画布
+fig = plt.figure(figsize=(24, 18))
+# 最大化窗口
+manager = plt.get_current_fig_manager()
+try:
+    manager.window.state('zoomed')  # Windows
+except:
+    try:
+        manager.full_screen_toggle()  # 其他系统
+    except:
+        pass  # 如果都不支持就保持默认
 fig.patch.set_facecolor('black')  # 黑色背景
 ax = fig.add_subplot(111, projection='3d')
 ax.set_facecolor('black')
 
 # 启用交互式导航工具栏
 plt.rcParams['toolbar'] = 'toolmanager'
+
+# 设置默认鼠标行为为平移而非旋转
+plt.rcParams['keymap.pan'] = ['p']  # p键启用平移模式
+plt.rcParams['keymap.zoom'] = ['o']  # o键启用缩放模式
+plt.rcParams['keymap.home'] = ['h', 'r', 'home']  # 重置视图
+plt.rcParams['keymap.back'] = ['left', 'c', 'backspace']  # 后退
+plt.rcParams['keymap.forward'] = ['right', 'v']  # 前进
+
+# 启用平移和缩放功能
+plt.rcParams['keymap.pan'] = ['p']  # p键启用平移模式
+plt.rcParams['keymap.zoom'] = ['o']  # o键启用缩放模式
+plt.rcParams['keymap.home'] = ['h', 'r', 'home']  # 重置视图
+plt.rcParams['keymap.back'] = ['left', 'c', 'backspace']  # 后退
+plt.rcParams['keymap.forward'] = ['right', 'v']  # 前进
 
 # 定义坐标
 missile_pos = np.array([20000, 0, 2000])
@@ -44,8 +68,16 @@ drop_distance = drone_speed * flight_time
 drop_position = drone_pos + direction_unit * drop_distance
 drop_position[2] = drone_pos[2]  # 保持等高度
 
-# 烟雾弹初始速度（继承无人机速度）
-smoke_initial_velocity = direction_unit * drone_speed
+# 烟雾弹初始速度（完全继承无人机的3D速度向量）
+# 无人机以120m/s在水平方向朝向原点飞行，z方向速度为0
+smoke_initial_velocity = np.array([
+    direction_unit[0] * drone_speed,  # x方向速度
+    direction_unit[1] * drone_speed,  # y方向速度  
+    0.0                               # z方向初始速度为0（等高度飞行）
+])
+
+print(f"🚁 无人机飞行方向单位向量: {direction_unit}")
+print(f"💣 烟雾弹初始速度向量: {smoke_initial_velocity} m/s")
 
 # 烟雾弹爆炸位置计算（考虑初速度和重力）
 # x, y方向：匀速直线运动
@@ -84,7 +116,11 @@ colors = {
     'drop': '#FF8844',
     'drop_glow': '#FFAA66',
     'missile_time': '#FF9999',
-    'missile_time_glow': '#FFBBBB'
+    'missile_time_glow': '#FFBBBB',
+    'target': '#00DD44',
+    'target_glow': '#44FF77',
+    'smoke_ball': '#DD44DD',
+    'smoke_ball_glow': '#FF77FF'
 }
 
 # 绘制导弹轨迹（发光效果）
@@ -171,7 +207,7 @@ def draw_drone_3d(ax, pos, color, size=80):
         [x - body_length/2, y + body_width/2, z + body_height/2]
     ]
     
-    # 绘制机身边框
+    # 绘制机边框
     edges = [
         [0, 1], [1, 2], [2, 3], [3, 0],  # 底面
         [4, 5], [5, 6], [6, 7], [7, 4],  # 顶面
@@ -269,6 +305,291 @@ ax.plot(missile_explosion_trajectory[:, 0], missile_explosion_trajectory[:, 1], 
 # 发光效果
 ax.plot(missile_explosion_trajectory[:, 0], missile_explosion_trajectory[:, 1], missile_explosion_trajectory[:, 2], 
         color=colors['missile_time_glow'], linestyle='-', linewidth=6, alpha=0.2)
+
+# 绘制真目标圆柱体
+def draw_target_cylinder(ax, center, radius, height, color):
+    """绘制真目标圆柱体"""
+    x0, y0, z0 = center
+    
+    # 创建圆柱体的侧面
+    theta = np.linspace(0, 2*np.pi, 30)
+    z_cylinder = np.linspace(z0, z0 + height, 10)
+    
+    # 侧面网格
+    THETA, Z = np.meshgrid(theta, z_cylinder)
+    X = x0 + radius * np.cos(THETA)
+    Y = y0 + radius * np.sin(THETA)
+    
+    # 绘制侧面
+    ax.plot_surface(X, Y, Z, color=color, alpha=0.7, linewidth=0.5, edgecolor='black')
+    
+    # 底面和顶面
+    theta_circle = np.linspace(0, 2*np.pi, 30)
+    r_circle = np.linspace(0, radius, 10)
+    THETA_CIRCLE, R_CIRCLE = np.meshgrid(theta_circle, r_circle)
+    
+    # 底面
+    X_bottom = x0 + R_CIRCLE * np.cos(THETA_CIRCLE)
+    Y_bottom = y0 + R_CIRCLE * np.sin(THETA_CIRCLE)
+    Z_bottom = np.full_like(X_bottom, z0)
+    ax.plot_surface(X_bottom, Y_bottom, Z_bottom, color=color, alpha=0.7)
+    
+    # 顶面
+    X_top = x0 + R_CIRCLE * np.cos(THETA_CIRCLE)
+    Y_top = y0 + R_CIRCLE * np.sin(THETA_CIRCLE)
+    Z_top = np.full_like(X_top, z0 + height)
+    ax.plot_surface(X_top, Y_top, Z_top, color=color, alpha=0.7)
+    
+    # 添加标记点
+    ax.scatter([x0], [y0], [z0 + height/2], s=200, c=color, marker='s', 
+              edgecolors=colors['target_glow'], linewidth=2, alpha=1.0)
+
+# 真目标位置和参数
+target_center = np.array([0, 200, 0])
+target_radius = 7  # 米
+target_height = 10  # 米
+
+# 绘制真目标圆柱体
+draw_target_cylinder(ax, target_center, target_radius, target_height, colors['target'])
+
+# 烟雾球参数
+smoke_ball_radius = 10  # 米
+smoke_sink_speed = 3  # m/s
+
+# 计算烟雾球遮挡时间
+def calculate_blocking_time():
+    """计算烟雾球为圆柱体遮挡导弹的时间"""
+    # 从爆炸时刻开始计算
+    start_time = total_time  # 5.1秒
+    blocking_start = None
+    blocking_end = None
+    
+    # 修正：导弹飞向假目标(原点)，烟雾保护真目标
+    missile_to_fake_target_direction = (origin - missile_pos) / np.linalg.norm(origin - missile_pos)
+    
+    print(f"\n🔍 遮挡计算详细分析:")
+    print(f"导弹初始位置: {missile_pos}")
+    print(f"假目标位置(导弹目标): {origin}")
+    print(f"真目标位置(需保护): {target_center}")
+    print(f"烟雾弹爆炸位置: {explosion_position}")
+    print(f"导弹到假目标距离: {np.linalg.norm(origin - missile_pos):.1f}m")
+    print(f"导弹到真目标距离: {np.linalg.norm(target_center - missile_pos):.1f}m")
+    
+    # 检查从爆炸后0到20秒的时间范围
+    for t in np.arange(0, 20, 0.1):  # 每0.1秒检查一次
+        current_time = start_time + t
+        
+        # 烟雾球当前位置（下沉）
+        smoke_ball_pos = explosion_position.copy()
+        smoke_ball_pos[2] -= smoke_sink_speed * t
+        
+        # 烟雾球如果下沉到地面以下，停止计算
+        if smoke_ball_pos[2] < -smoke_ball_radius:
+            break
+        
+        # 检查烟雾是否已超过有效时间（20秒）
+        if t > 20:
+            print(f"烟雾在{current_time:.1f}s时失效（超过20秒有效期）")
+            if blocking_start is not None and blocking_end is None:
+                blocking_end = current_time
+                print(f"遮挡因烟雾失效而结束: {current_time:.1f}s")
+            break
+        
+        # 导弹当前位置（修正：导弹飞向假目标原点）
+        missile_current_pos = missile_pos + missile_to_fake_target_direction * missile_speed * current_time
+        
+        # 检查导弹是否已到达假目标
+        if np.linalg.norm(missile_current_pos - origin) < 50:  # 导弹到达假目标附近
+            print(f"导弹在{current_time:.1f}s时到达假目标")
+            break
+            
+        # 检查烟雾球是否遮挡了导弹观察真目标圆柱体的视线（只有在有效时间内）
+        if t <= 20 and is_blocking_cylinder_target(missile_current_pos, target_center, target_radius, target_height, smoke_ball_pos, smoke_ball_radius):
+            if blocking_start is None:
+                blocking_start = current_time
+                print(f"遮挡开始: {current_time:.1f}s, 导弹位置: {missile_current_pos}, 烟雾球位置: {smoke_ball_pos}")
+        else:
+            if blocking_start is not None and blocking_end is None:
+                blocking_end = current_time
+                print(f"遮挡结束: {current_time:.1f}s, 导弹位置: {missile_current_pos}, 烟雾球位置: {smoke_ball_pos}")
+                break
+    
+    # 如果遮挡一直持续到检查结束或烟雾失效
+    if blocking_start is not None and blocking_end is None:
+        blocking_end = start_time + 20  # 烟雾最大有效时间
+        print(f"遮挡持续到烟雾失效: {blocking_end:.1f}s")
+    
+    return blocking_start, blocking_end
+
+def is_blocking_cylinder_target(missile_pos, target_base_center, target_radius, target_height, smoke_pos, smoke_radius):
+    """判断烟雾球是否遮挡导弹观察圆柱体目标的视线（改进版）"""
+    # 圆柱体轴线：从底面中心到顶面中心
+    target_bottom = target_base_center
+    target_top = target_base_center + np.array([0, 0, target_height])
+    
+    # 导弹到目标的距离检查
+    missile_to_target_dist = np.linalg.norm(target_base_center - missile_pos)
+    if missile_to_target_dist < 100:  # 导弹距离目标太近
+        return False
+    
+    # 在圆柱轴线上找与导弹z高度最接近的点
+    missile_z = missile_pos[2]
+    target_z_clamped = np.clip(missile_z, target_bottom[2], target_top[2])
+    
+    # 圆柱轴线上的最近点
+    closest_point_on_axis = np.array([target_base_center[0], target_base_center[1], target_z_clamped])
+    
+    # 导弹到轴线最近点的视线方向
+    missile_to_target = closest_point_on_axis - missile_pos
+    missile_to_target_dist = np.linalg.norm(missile_to_target)
+    
+    if missile_to_target_dist < 1e-6:  # 避免除零
+        return False
+        
+    missile_to_target_unit = missile_to_target / missile_to_target_dist
+    
+    # 导弹到烟雾球中心的向量
+    missile_to_smoke = smoke_pos - missile_pos
+    
+    # 烟雾球中心在导弹-目标视线上的投影距离
+    proj_dist = np.dot(missile_to_smoke, missile_to_target_unit)
+    
+    # 如果投影在导弹后方或目标后方，则不遮挡
+    if proj_dist < 0 or proj_dist > missile_to_target_dist:
+        return False
+    
+    # 计算烟雾球中心到导弹-目标视线的距离
+    proj_point = missile_pos + proj_dist * missile_to_target_unit
+    dist_to_line = np.linalg.norm(smoke_pos - proj_point)
+    
+    # 烟雾球的有效遮挡半径（考虑目标半径）
+    effective_blocking_radius = smoke_radius + target_radius
+    
+    # 判断烟雾球是否能遮挡导弹观察目标的视线
+    is_blocked = dist_to_line < effective_blocking_radius
+    
+    if is_blocked:
+        print(f"    🎯 圆柱体遮挡检测: 导弹{missile_pos} -> 目标轴线点{closest_point_on_axis}")
+        print(f"    💨 烟雾球位置: {smoke_pos}, 到视线距离: {dist_to_line:.1f}m")
+        print(f"    🛡️ 有效遮挡半径: {effective_blocking_radius:.1f}m, 遮挡: {is_blocked}")
+    
+    return is_blocked
+
+def is_blocking_real_target(missile_pos, real_target_pos, smoke_pos, smoke_radius, target_radius):
+    """判断烟雾球是否遮挡导弹观察真目标的视线"""
+    # 导弹到真目标的方向向量
+    missile_to_real_target = real_target_pos - missile_pos
+    missile_to_real_target_dist = np.linalg.norm(missile_to_real_target)
+    
+    if missile_to_real_target_dist < 100:  # 导弹距离真目标太近
+        return False
+        
+    missile_to_real_target_unit = missile_to_real_target / missile_to_real_target_dist
+    
+    # 导弹到烟雾球中心的向量
+    missile_to_smoke = smoke_pos - missile_pos
+    
+    # 烟雾球中心在导弹-真目标连线上的投影距离
+    proj_dist = np.dot(missile_to_smoke, missile_to_real_target_unit)
+    
+    # 如果投影在导弹后方或真目标后方，则不遮挡
+    if proj_dist < 0 or proj_dist > missile_to_real_target_dist:
+        return False
+    
+    # 计算烟雾球中心到导弹-真目标连线的距离
+    proj_point = missile_pos + proj_dist * missile_to_real_target_unit
+    dist_to_line = np.linalg.norm(smoke_pos - proj_point)
+    
+    # 烟雾球的有效遮挡半径（考虑目标尺寸）
+    effective_blocking_radius = smoke_radius + target_radius
+    
+    # 判断烟雾球是否能遮挡导弹观察真目标的视线
+    is_blocked = dist_to_line < effective_blocking_radius
+    
+    if is_blocked:
+        print(f"    遮挡检测: 导弹{missile_pos} -> 真目标{real_target_pos}")
+        print(f"    烟雾球位置: {smoke_pos}, 到视线距离: {dist_to_line:.1f}m")
+        print(f"    有效遮挡半径: {effective_blocking_radius:.1f}m, 遮挡: {is_blocked}")
+    
+    return is_blocked
+
+# 计算遮挡时间
+# 绘制遮挡关键时刻的位置
+blocking_start, blocking_end = calculate_blocking_time()
+
+if blocking_start is not None and blocking_end is not None:
+    # 计算遮挡开始时刻的位置
+    start_t = blocking_start - total_time  # 相对于爆炸时刻的时间
+    start_missile_pos = missile_pos + missile_direction * missile_speed * blocking_start
+    start_smoke_pos = explosion_position.copy()
+    start_smoke_pos[2] -= smoke_sink_speed * start_t
+    
+    # 计算遮挡结束时刻的位置
+    end_t = blocking_end - total_time  # 相对于爆炸时刻的时间
+    end_missile_pos = missile_pos + missile_direction * missile_speed * blocking_end
+    end_smoke_pos = explosion_position.copy()
+    end_smoke_pos[2] -= smoke_sink_speed * end_t
+    
+    # 绘制遮挡开始时刻
+    ax.scatter(*start_missile_pos, s=400, c='#FF0000', marker='D', 
+              edgecolors='white', linewidth=3, label=f'导弹遮挡开始({blocking_start:.1f}s)', alpha=0.9)
+    ax.scatter(*start_smoke_pos, s=400, c='#8B00FF', marker='o', 
+              edgecolors='white', linewidth=3, label=f'烟雾球遮挡开始({blocking_start:.1f}s)', alpha=0.9)
+    
+    # 绘制遮挡结束时刻
+    ax.scatter(*end_missile_pos, s=400, c='#FF6600', marker='D', 
+              edgecolors='white', linewidth=3, label=f'导弹遮挡结束({blocking_end:.1f}s)', alpha=0.9)
+    ax.scatter(*end_smoke_pos, s=400, c='#FF1493', marker='o', 
+              edgecolors='white', linewidth=3, label=f'烟雾球遮挡结束({blocking_end:.1f}s)', alpha=0.9)
+    
+    # 绘制遮挡开始和结束的连线
+    ax.plot([start_missile_pos[0], start_smoke_pos[0]], 
+            [start_missile_pos[1], start_smoke_pos[1]], 
+            [start_missile_pos[2], start_smoke_pos[2]], 
+            color='#FF0000', linewidth=3, alpha=0.7, linestyle='--', label='遮挡开始视线')
+    
+    ax.plot([end_missile_pos[0], end_smoke_pos[0]], 
+            [end_missile_pos[1], end_smoke_pos[1]], 
+            [end_missile_pos[2], end_smoke_pos[2]], 
+            color='#FF6600', linewidth=3, alpha=0.7, linestyle='--', label='遮挡结束视线')
+    
+    # 添加文本标注
+    ax.text(start_missile_pos[0], start_missile_pos[1], start_missile_pos[2] + 50, 
+            f'遮挡开始\n{blocking_start:.1f}s', fontsize=10, fontweight='bold',
+            ha='center', va='bottom', color='#FF0000',
+            bbox=dict(boxstyle='round,pad=0.3', facecolor='white', 
+                     edgecolor='#FF0000', alpha=0.8, linewidth=2))
+    
+    ax.text(end_missile_pos[0], end_missile_pos[1], end_missile_pos[2] + 50, 
+            f'遮挡结束\n{blocking_end:.1f}s', fontsize=10, fontweight='bold',
+            ha='center', va='bottom', color='#FF6600',
+            bbox=dict(boxstyle='round,pad=0.3', facecolor='white', 
+                     edgecolor='#FF6600', alpha=0.8, linewidth=2))
+
+# 绘制烟雾球在几个关键时刻的位置
+key_times = [0, 5, 10, 15]  # 爆炸后的时间点
+for i, t in enumerate(key_times):
+    if t <= 20:  # 烟雾有效时间内
+        smoke_ball_pos = explosion_position.copy()
+        smoke_ball_pos[2] -= smoke_sink_speed * t
+        
+        # 只绘制在视角范围内的烟雾球
+        if smoke_ball_pos[2] >= 1600:
+            alpha = 0.6 - i * 0.1  # 随时间变淡
+            
+            # 绘制烟雾球（球体）
+            u = np.linspace(0, 2 * np.pi, 20)
+            v = np.linspace(0, np.pi, 20)
+            x_sphere = smoke_ball_pos[0] + smoke_ball_radius * np.outer(np.cos(u), np.sin(v))
+            y_sphere = smoke_ball_pos[1] + smoke_ball_radius * np.outer(np.sin(u), np.sin(v))
+            z_sphere = smoke_ball_pos[2] + smoke_ball_radius * np.outer(np.ones(np.size(u)), np.cos(v))
+            
+            ax.plot_surface(x_sphere, y_sphere, z_sphere, 
+                          color=colors['smoke_ball'], alpha=alpha, linewidth=0)
+            
+            if i == 0:  # 只为第一个添加标签
+                ax.scatter(*smoke_ball_pos, s=100, c=colors['smoke_ball'], 
+                          marker='o', label=f'烟雾球(t+{t}s)', alpha=alpha)
 
 # 原点在当前视角范围外，添加指示箭头
 # 添加指向原点的箭头
@@ -409,6 +730,10 @@ legend_elements = [
               markersize=12, label='投弹位置(1.5s后)', markeredgecolor=colors['drop_glow']),
     plt.Line2D([0], [0], marker='*', color='w', markerfacecolor=colors['smoke'], 
               markersize=14, label='烟雾弹爆炸位置', markeredgecolor=colors['smoke_glow']),
+    plt.Line2D([0], [0], marker='s', color='w', markerfacecolor=colors['target'], 
+              markersize=12, label='真目标圆柱体', markeredgecolor=colors['target_glow']),
+    plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=colors['smoke_ball'], 
+              markersize=10, label='烟雾球', markeredgecolor=colors['smoke_ball_glow']),
     plt.Line2D([0], [0], color=colors['trajectory'], linestyle='-', 
               linewidth=4, label='导弹完整轨迹'),
     plt.Line2D([0], [0], color=colors['missile_time'], linestyle='-', 
@@ -424,7 +749,7 @@ legend = ax.legend(handles=legend_elements, loc='center left', bbox_to_anchor=(1
                  fontsize=9, framealpha=0.95, facecolor=colors['background'], 
                  edgecolor=colors['text'], labelcolor=colors['text'])
 legend.get_frame().set_linewidth(1)
-# 调整图例框的内边距
+# 添加图例框的内边距
 legend.get_frame().set_boxstyle('round,pad=0.3')
 
 # 设置视角（增强立体感）
@@ -615,4 +940,19 @@ print(f"爆炸位置到原点距离: {np.linalg.norm(explosion_position - origin
 print(f"导弹爆炸时位置: ({missile_explosion_time_pos[0]:.1f}, {missile_explosion_time_pos[1]:.1f}, {missile_explosion_time_pos[2]:.1f})")
 print(f"导弹爆炸时到原点距离: {np.linalg.norm(missile_explosion_time_pos - origin):.2f} 米")
 print(f"导弹与烟雾弹爆炸时距离: {np.linalg.norm(missile_explosion_time_pos - explosion_position):.2f} 米")
+print(f"真目标圆柱体位置: {tuple(target_center)}")
+print(f"真目标圆柱体参数: 半径{target_radius}m, 高度{target_height}m")
+print(f"烟雾球半径: {smoke_ball_radius}m")
+print(f"烟雾球下沉速度: {smoke_sink_speed}m/s")
+print(f"烟雾有效时间: 20s（起爆后失效）")
+
+if blocking_start is not None and blocking_end is not None:
+    blocking_duration = blocking_end - blocking_start
+    print(f"\n🛡️ 烟雾遮挡分析:")
+    print(f"遮挡开始时间: {blocking_start:.1f}s")
+    print(f"遮挡结束时间: {blocking_end:.1f}s")
+    print(f"遮挡持续时间: {blocking_duration:.1f}s")
+else:
+    print(f"\n🛡️ 烟雾遮挡分析: 烟雾球未能有效遮挡导弹视线")
+
 print("=" * 70)

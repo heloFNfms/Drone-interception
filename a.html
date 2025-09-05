@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>导弹-烟球-圆柱遮蔽3D仿真（优化版）</title>
+    <!-- three.js r128 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        :root {
+            --panel-bg: rgba(0, 0, 0, 0.70);
+            --accent: #4CAF50;
+        }
+
+        html,
+        body {
+            margin: 0;
+            height: 100%;
+            background: #000;
+            font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+            color: #fff;
+        }
+
+        #container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #controls,
+        #info {
+            position: absolute;
+            top: 12px;
+            background: var(--panel-bg);
+            padding: 14px 16px;
+            border-radius: 10px;
+            z-index: 10;
+        }
+
+        #controls {
+            left: 12px;
+            max-width: 380px;
+        }
+
+        #info {
+            right: 12px;
+            max-width: 360px;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+
+        h3 {
+            margin: 0 0 8px 0;
+            font-weight: 700;
+        }
+
+        button {
+            margin: 6px 6px 6px 0;
+            padding: 8px 12px;
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            filter: brightness(1.05);
+        }
+
+        button:disabled {
+            background: #555;
+            cursor: not-allowed;
+        }
+
+        input[type="range"] {
+            width: 220px;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 6px;
+            font-weight: 700;
+        }
+
+        .ok {
+            color: #44ff66;
+        }
+
+        .bad {
+            color: #ff6666;
+        }
+
+        .muted {
+            opacity: 0.85;
+        }
+
+        .mono {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        }
+
+        .legend {
+            font-size: 12px;
+            opacity: .9;
+            margin-top: 6px;
+            line-height: 1.3;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="container">
+        <div id="controls">
+            <h3>控制面板</h3>
+            <button id="startBtn">开始仿真</button>
+            <button id="pauseBtn" disabled>暂停</button>
+            <button id="resetBtn">重置</button>
+            <div class="legend">视角：按住鼠标左键旋转，滚轮缩放</div>
+            <hr style="border:none;border-top:1px solid #333; margin:10px 0" />
+            <div>
+                <label>时间倍速：<span id="speedValue" class="mono">1.0x</span></label><br />
+                <input type="range" id="speedSlider" min="0.1" max="5" step="0.1" value="1" />
+            </div>
+        </div>
+
+        <div id="info">
+            <h3>仿真信息</h3>
+            <div>当前时间：<span id="currentTime" class="mono">0.00</span> s</div>
+            <div>导弹位置 M(t)：(<span id="missilePos" class="mono">20000, 0, 2000</span>)</div>
+            <div>无人机位置 D(t)：(<span id="dronePos" class="mono">17800, 0, 1800</span>)</div>
+            <div>烟雾状态：<span id="smokeStatus" class="badge">未投放</span></div>
+            <div>遮蔽状态：<span id="blockStatus" class="badge ok">未遮蔽</span></div>
+            <div>遮蔽开始时间 t<sub>on</sub>：<span id="blockStart" class="mono">--</span> s</div>
+            <div>遮蔽结束时间 t<sub>off</sub>：<span id="blockEnd" class="mono">--</span> s</div>
+            <div>总遮蔽时间 Δt：<span id="totalBlockTime" class="mono">--</span> s</div>
+            <hr style="border:none;border-top:1px solid #333; margin:10px 0" />
+            <div class="legend">
+                坐标系说明（建模坐标 → Three.js）：<br />
+                <span class="mono">(X, Y, Z)</span>，其中 <span class="mono">Z</span> 为高度/海拔。<br />
+                Three.js 采用 <span class="mono">(x, y, z)</span>，其中 <span class="mono">y</span> 向上。<br />
+                我们映射：<span class="mono">(X, Y, Z) → (x=X, y=Z, z=Y)</span>。
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * 物理与几何设定（严格按题意）
+         * - 导弹 M0 = (20000, 0, 2000)，以 300 m/s 指向原点 A=(0,0,0) 匀速直线运动。
+         * - 无人机 D0 = (17800, 0, 1800)，接下来 1.5 s 以 120 m/s 等高度（Z 不变）匀速朝 A 飞行。
+         * - t = 1.5 s 时投放烟雾弹；烟雾弹以投放时的水平初速度平抛，重力加速度 g=9.8 m/s^2（沿 -Z）。
+         * - 平抛 3.6 s 后（即全局 t = 5.1 s）爆炸，生成半径 r_s=10 m 的烟球；
+         * - 烟球之后以 3 m/s 匀速下沉（沿 -Z）。
+         * - 圆柱体 B：半径 r_b=7 m，高 h_b=10 m；下底圆心坐标 (0, 200, 0)。
+         *   为遮蔽判定近似，将 B 等效为球：中心 C_b=(0, 200, 5)，半径 R_b = sqrt(r_b^2 + (h_b/2)^2)。
+         *
+         * 遮蔽判定（稳健近似，工业可用）：
+         *   将烟球半径扩张为 r' = r_s + R_b，判断线段 M→C_b 是否与以 S 为球心、半径 r' 的球相交，且交点位于段内。
+         *   这对应“存在从导弹到 B 的一条视线与烟球相交”。
+         */
+
+        // ---------- 常量：建模空间（X,Y,Z，Z为高度） ----------
+        const g = 9.8; // m/s^2
+
+        const M0 = new THREE.Vector3(20000, 0, 2000); // 导弹初始
+        const D0 = new THREE.Vector3(17800, 0, 1800); // 无人机初始
+
+        const B_RADIUS = 7; // m
+        const B_HEIGHT = 10; // m
+        const B_BASE_CENTER = new THREE.Vector3(0, 200, 0); // 下底圆心 (X,Y,Z)
+        const B_CENTER = new THREE.Vector3(0, 200, 0 + B_HEIGHT / 2); // 圆柱中心
+        const B_EQ_SPHERE_R = Math.sqrt(B_RADIUS * B_RADIUS + (B_HEIGHT / 2) * (B_HEIGHT / 2)); // 等效球半径
+
+        const v_missile = 300; // m/s
+        const v_drone = 120; // m/s
+        const smoke_sink = 3; // m/s（烟球下沉）
+        const smoke_radius = 10; // m
+
+        const t_throw = 1.5; // s 投放时刻
+        const t_fall = 3.6; // s 平抛时长
+        const t_boom = t_throw + t_fall; // 5.1 s 爆炸形成烟球
+
+        // ---------- Three.js 基础 ----------
+        let scene, camera, renderer;
+        let missileMesh, droneMesh, cylinderBMesh, trailMesh, smokeBallMesh, shadowConeMesh, groundGrid, axesHelper;
+
+        const state = {
+            running: false,
+            time: 0,
+            speed: 1,
+            lastFrameMs: performance.now(),
+            // 遮蔽记录
+            blocked: false,
+            tOn: null,
+            tOff: null,
+        };
+
+        // ---------- 工具：建模坐标 → Three 坐标 ----------
+        function toThreeVec(v /* THREE.Vector3 (X,Y,Z) */) {
+            return new THREE.Vector3(v.x, v.z, v.y); // (x=X, y=Z, z=Y)
+        }
+
+        function fromThreeVec(v /* THREE.Vector3 (x,y,z) */) {
+            return new THREE.Vector3(v.x, v.z, v.y);
+        }
+
+        // ---------- 物体创建 ----------
+        init();
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0b1020);
+
+            camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 1, 200000);
+            camera.position.set(26000, 8000, 12000);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            document.getElementById('container').appendChild(renderer.domElement);
+
+            const ambient = new THREE.AmbientLight(0xffffff, 0.7);
+            scene.add(ambient);
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight.position.set(30000, 20000, 12000);
+            dirLight.castShadow = true;
+            scene.add(dirLight);
+
+            axesHelper = new THREE.AxesHelper(5000);
+            scene.add(axesHelper);
+            groundGrid = new THREE.GridHelper(60000, 300, 0x323232, 0x323232);
+            scene.add(groundGrid);
+
+            createMissile();
+            createDrone();
+            createCylinderB();
+
+            createMissilePath();
+            createDronePath();
+
+            setupControls();
+            bindUI();
+
+            render();
+        }
+
+        function createMissile() {
+            const geom = new THREE.ConeGeometry(60, 240, 12);
+            const mat = new THREE.MeshPhongMaterial({ color: 0xff5555 });
+            missileMesh = new THREE.Mesh(geom, mat);
+            missileMesh.castShadow = true;
+            // 朝向：沿 +y 是模型的尖端；我们让尖端指向速度方向（初始朝原点）
+            const vMdir = M0.clone().multiplyScalar(-1).normalize();
+            orientCone(missileMesh, M0, vMdir, 240);
+            scene.add(missileMesh);
+        }
+
+        function createDrone() {
+            const geom = new THREE.BoxGeometry(160, 24, 160);
+            const mat = new THREE.MeshPhongMaterial({ color: 0x5577ff });
+            droneMesh = new THREE.Mesh(geom, mat);
+            droneMesh.castShadow = true;
+            droneMesh.position.copy(toThreeVec(D0));
+            scene.add(droneMesh);
+        }
+
+        function createCylinderB() {
+            const geom = new THREE.CylinderGeometry(B_RADIUS, B_RADIUS, B_HEIGHT, 32);
+            const mat = new THREE.MeshPhongMaterial({ color: 0x44ff88 });
+            cylinderBMesh = new THREE.Mesh(geom, mat);
+            cylinderBMesh.castShadow = true;
+            // Three 的 y 为高度，所以置于 Z=5（高度中心）
+            const centerThree = toThreeVec(B_CENTER);
+            cylinderBMesh.position.copy(centerThree);
+            scene.add(cylinderBMesh);
+        }
+
+        function createMissilePath() {
+            const points = [];
+            const Mdir = M0.clone().multiplyScalar(-1).normalize();
+            const L = M0.length();
+            const T = L / v_missile;
+            for (let t = 0; t <= T; t += 0.5) {
+                const p = M0.clone().add(Mdir.clone().multiplyScalar(v_missile * t));
+                points.push(toThreeVec(p));
+            }
+            const path = new THREE.BufferGeometry().setFromPoints(points);
+            const mat = new THREE.LineBasicMaterial({ color: 0xff8888, transparent: true, opacity: 0.6 });
+            const line = new THREE.Line(path, mat);
+            scene.add(line);
+        }
+
+        function createDronePath() {
+            const points = [];
+            const dirXY = new THREE.Vector3(-D0.x, -D0.y, 0).normalize();
+            for (let t = 0; t <= t_throw; t += 0.1) {
+                const p = D0.clone().add(dirXY.clone().multiplyScalar(v_drone * t));
+                points.push(toThreeVec(p));
+            }
+            const path = new THREE.BufferGeometry().setFromPoints(points);
+            const mat = new THREE.LineBasicMaterial({ color: 0x88bbff, transparent: true, opacity: 0.6 });
+            const line = new THREE.Line(path, mat);
+            scene.add(line);
+        }
+
+        // ---------- 控件（简易轨道） ----------
+        function setupControls() {
+            let isDown = false, mx = 0, my = 0;
+            renderer.domElement.addEventListener('mousedown', (e) => { isDown = true; mx = e.clientX; my = e.clientY; });
+            window.addEventListener('mouseup', () => { isDown = false; });
+            renderer.domElement.addEventListener('mousemove', (e) => {
+                if (!isDown) return;
+                const dx = e.clientX - mx; const dy = e.clientY - my;
+                const sph = new THREE.Spherical();
+                sph.setFromVector3(camera.position.clone());
+                sph.theta -= dx * 0.005;
+                sph.phi += dy * 0.005;
+                sph.phi = Math.max(0.1, Math.min(Math.PI - 0.1, sph.phi));
+                camera.position.setFromSpherical(sph);
+                camera.lookAt(0, 0, 0);
+                mx = e.clientX; my = e.clientY;
+            });
+            renderer.domElement.addEventListener('wheel', (e) => {
+                const k = e.deltaY > 0 ? 1.1 : 0.9; camera.position.multiplyScalar(k); camera.position.clampLength(800, 90000);
+            });
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+        }
+
+        // ---------- UI ----------
+        function bindUI() {
+            const startBtn = document.getElementById('startBtn');
+            const pauseBtn = document.getElementById('pauseBtn');
+            const resetBtn = document.getElementById('resetBtn');
+            const speedSlider = document.getElementById('speedSlider');
+            startBtn.addEventListener('click', () => { state.running = true; startBtn.disabled = true; pauseBtn.disabled = false; animate(); });
+            pauseBtn.addEventListener('click', () => { state.running = false; startBtn.disabled = false; pauseBtn.disabled = true; });
+            resetBtn.addEventListener('click', resetAll);
+            speedSlider.addEventListener('input', (e) => { state.speed = parseFloat(e.target.value); document.getElementById('speedValue').textContent = state.speed.toFixed(1) + 'x'; });
+        }
+
+        function resetAll() {
+            state.running = false; state.time = 0; state.lastFrameMs = performance.now();
+            state.blocked = false; state.tOn = null; state.tOff = null;
+
+            // 清掉烟痕、烟球、阴影锥
+            if (trailMesh) { scene.remove(trailMesh); trailMesh.geometry.dispose(); trailMesh.material.dispose(); trailMesh = null; }
+            if (smokeBallMesh) { scene.remove(smokeBallMesh); smokeBallMesh.geometry.dispose(); smokeBallMesh.material.dispose(); smokeBallMesh = null; }
+            if (shadowConeMesh) { scene.remove(shadowConeMesh); shadowConeMesh.geometry.dispose(); shadowConeMesh.material.dispose(); shadowConeMesh = null; }
+
+            // 复位导弹与无人机
+            const vMdir = M0.clone().multiplyScalar(-1).normalize();
+            orientCone(missileMesh, M0, vMdir, 240);
+            droneMesh.position.copy(toThreeVec(D0));
+
+            updateInfo(); render();
+            document.getElementById('startBtn').disabled = false; document.getElementById('pauseBtn').disabled = true;
+        }
+
+        // ---------- 主循环 ----------
+        function animate() {
+            if (!state.running) return;
+            const now = performance.now();
+            const dt = Math.min(0.05, (now - state.lastFrameMs) / 1000) * state.speed; // 防抖 & 倍速
+            state.lastFrameMs = now;
+            state.time += dt;
+
+            stepPhysics(state.time);
+            updateInfo();
+            render();
+
+            // 达到遮蔽-失效的闭环后自动收尾
+            if (state.tOn !== null && state.tOff !== null) {
+                state.running = false; document.getElementById('startBtn').disabled = false; document.getElementById('pauseBtn').disabled = true; return;
+            }
+
+            requestAnimationFrame(animate);
+        }
+
+        // ---------- 物理推进与遮蔽判定 ----------
+        function stepPhysics(t) {
+            // 1) 导弹 M(t) 匀速朝原点
+            const Mdir = M0.clone().multiplyScalar(-1).normalize();
+            const Mt = M0.clone().add(Mdir.clone().multiplyScalar(v_missile * t));
+            const vMdir = Mdir.clone();
+            orientCone(missileMesh, Mt, vMdir, 240);
+
+            // 2) 无人机 D(t)
+            const dirXY = new THREE.Vector3(-D0.x, -D0.y, 0).normalize(); // 水平朝向原点
+            const Dt = t <= t_throw ? D0.clone().add(dirXY.clone().multiplyScalar(v_drone * Math.min(t, t_throw))) : D0.clone().add(dirXY.clone().multiplyScalar(v_drone * t_throw));
+            droneMesh.position.copy(toThreeVec(Dt));
+
+            // 3) 烟雾弹/烟球
+            let smokeCenter = null; // S(t)
+            if (t < t_throw) {
+                setSmokeStatus('未投放');
+            } else if (t < t_boom) {
+                // 平抛
+                const t1 = t - t_throw;
+                const P0 = D0.clone().add(dirXY.clone().multiplyScalar(v_drone * t_throw)); // 投放点
+                const V0 = dirXY.clone().multiplyScalar(v_drone); // 水平初速
+                const Sx = P0.x + V0.x * t1;
+                const Sy = P0.y + V0.y * t1;
+                const Sz = P0.z - 0.5 * g * t1 * t1; // 向下
+                smokeCenter = new THREE.Vector3(Sx, Sy, Sz);
+                setSmokeStatus('平抛中');
+
+                // 渲染弹体（小黄球）
+                if (!trailMesh) {
+                    const gph = new THREE.SphereGeometry(20, 16, 16);
+                    const mph = new THREE.MeshPhongMaterial({ color: 0xffe066 });
+                    trailMesh = new THREE.Mesh(gph, mph);
+                    scene.add(trailMesh);
+                }
+                trailMesh.position.copy(toThreeVec(smokeCenter));
+            } else {
+                // 烟球 + 匀速下沉
+                const t2 = t - t_boom;
+                const P0 = D0.clone().add(dirXY.clone().multiplyScalar(v_drone * t_throw));
+                const V0 = dirXY.clone().multiplyScalar(v_drone);
+                const Sboom = new THREE.Vector3(P0.x + V0.x * t_fall, P0.y + V0.y * t_fall, P0.z - 0.5 * g * t_fall * t_fall);
+                smokeCenter = new THREE.Vector3(Sboom.x, Sboom.y, Sboom.z - smoke_sink * t2);
+                setSmokeStatus('烟球下沉');
+
+                if (!smokeBallMesh) {
+                    const gph = new THREE.SphereGeometry(smoke_radius, 32, 32);
+                    const mph = new THREE.MeshPhongMaterial({ color: 0x999999, transparent: true, opacity: 0.5 });
+                    smokeBallMesh = new THREE.Mesh(gph, mph);
+                    scene.add(smokeBallMesh);
+                    // 移除弹体
+                    if (trailMesh) { scene.remove(trailMesh); trailMesh.geometry.dispose(); trailMesh.material.dispose(); trailMesh = null; }
+                }
+                smokeBallMesh.position.copy(toThreeVec(smokeCenter));
+
+                // 阴影锥可视化（切线圆锥）
+                drawShadowCone(Mt, smokeCenter, smoke_radius);
+            }
+
+            // 4) 遮蔽判定（仅烟球阶段才可能遮蔽）
+            if (smokeCenter && t >= t_boom) {
+                const blockedNow = isCylinderInShadowCone(Mt, smokeCenter, smoke_radius);
+                if (blockedNow && !state.blocked) {
+                    state.blocked = true; state.tOn = t;
+                    console.log(`遮蔽开始时间: ${t.toFixed(3)}s`);
+                }
+                if (!blockedNow && state.blocked && state.tOff === null) {
+                    state.blocked = false; state.tOff = t;
+                    console.log(`遮蔽结束时间: ${t.toFixed(3)}s`);
+                    console.log(`总遮蔽时间: ${(t - state.tOn).toFixed(3)}s`);
+                }
+            }
+        }
+
+        // 判断圆柱体B是否被导弹到烟雾球的切线圆锥遮挡
+        function isCylinderInShadowCone(missilePos, smokeCenter, smokeRadius) {
+            const MS = smokeCenter.clone().sub(missilePos);
+            const distMS = MS.length();
+            
+            // 如果导弹在烟雾球内部，无法形成阴影锥
+            if (distMS <= smokeRadius) return false;
+            
+            // 计算切线圆锥的半顶角
+            const sinAlpha = smokeRadius / distMS;
+            const cosAlpha = Math.sqrt(1 - sinAlpha * sinAlpha);
+            
+            // 圆锥轴向量（从导弹指向烟雾球中心）
+            const coneAxis = MS.clone().normalize();
+            
+            // 检查圆柱体的多个关键点是否在圆锥内
+            const cylinderCenter = B_CENTER;
+            const cylinderRadius = B_RADIUS;
+            const cylinderHeight = B_HEIGHT;
+            
+            // 检查圆柱体底面圆心
+            const bottomCenter = new THREE.Vector3(cylinderCenter.x, cylinderCenter.y, cylinderCenter.z - cylinderHeight/2);
+            // 检查圆柱体顶面圆心
+            const topCenter = new THREE.Vector3(cylinderCenter.x, cylinderCenter.y, cylinderCenter.z + cylinderHeight/2);
+            
+            // 检查这些点是否在圆锥内
+            const points = [bottomCenter, topCenter, cylinderCenter];
+            
+            // 在圆柱体边缘采样更多点进行检测
+            for (let angle = 0; angle < 2 * Math.PI; angle += Math.PI / 4) {
+                const edgeX = cylinderCenter.x + cylinderRadius * Math.cos(angle);
+                const edgeY = cylinderCenter.y + cylinderRadius * Math.sin(angle);
+                points.push(new THREE.Vector3(edgeX, edgeY, cylinderCenter.z - cylinderHeight/2)); // 底面边缘
+                points.push(new THREE.Vector3(edgeX, edgeY, cylinderCenter.z + cylinderHeight/2)); // 顶面边缘
+            }
+            
+            // 检查是否有点在圆锥内
+            for (const point of points) {
+                const MP = point.clone().sub(missilePos);
+                const distMP = MP.length();
+                
+                if (distMP > 0) {
+                    const dotProduct = MP.dot(coneAxis) / distMP;
+                    
+                    // 检查点是否在圆锥的正确一侧（烟雾球后方）
+                    if (dotProduct > cosAlpha && MP.dot(coneAxis) > distMS) {
+                        // 计算点到圆锥轴的距离
+                        const projectionLength = MP.dot(coneAxis);
+                        const projection = coneAxis.clone().multiplyScalar(projectionLength);
+                        const perpendicular = MP.clone().sub(projection);
+                        const perpDistance = perpendicular.length();
+                        
+                        // 计算在该距离处圆锥的半径
+                        const coneRadiusAtPoint = (projectionLength - distMS) * Math.tan(Math.asin(sinAlpha));
+                        
+                        if (perpDistance <= coneRadiusAtPoint) {
+                            return true; // 找到一个点在阴影中
+                        }
+                    }
+                }
+            }
+            
+            return false;
+        }
+
+        // 可视化：从 M 指向 S 的切线圆锥（半顶角 alpha 满足 sin(alpha)=r/L）
+        function drawShadowCone(M, S, r) {
+            const L = S.clone().sub(M).length();
+            if (L <= r + 1e-6) { if (shadowConeMesh) { scene.remove(shadowConeMesh); shadowConeMesh = null; } return; }
+            const sinA = r / L; const alpha = Math.asin(Math.min(1, Math.max(0, sinA)));
+            const H = L * 1.2; // 可视化高度（延长一点）
+            const R = Math.tan(alpha) * H;
+
+            const geom = new THREE.ConeGeometry(R, H, 32, 1, true); // 无底锥以便观察
+            const mat = new THREE.MeshBasicMaterial({ color: 0xff4444, transparent: true, opacity: 0.18, side: THREE.DoubleSide });
+            if (shadowConeMesh) { scene.remove(shadowConeMesh); shadowConeMesh.geometry.dispose(); shadowConeMesh.material.dispose(); }
+            shadowConeMesh = new THREE.Mesh(geom, mat);
+
+            // 将圆锥的 +y 顶点（apex）对齐到 M，并指向 S
+            const u = S.clone().sub(M).normalize();
+            const q = new THREE.Quaternion();
+            q.setFromUnitVectors(new THREE.Vector3(0, 1, 0), toThreeVec(u).clone().normalize());
+            shadowConeMesh.quaternion.copy(q);
+            // apex 在本地 +H/2 处 → 设位置，使 apex = M
+            const apexOffset = toThreeVec(u.clone().multiplyScalar(H / 2));
+            shadowConeMesh.position.copy(toThreeVec(M).clone().sub(apexOffset));
+
+            scene.add(shadowConeMesh);
+        }
+
+        // 让锥体尖端沿给定方向并放置到指定位置
+        function orientCone(coneMesh, apexPosXYZ, dirXYZ, height) {
+            const q = new THREE.Quaternion();
+            q.setFromUnitVectors(new THREE.Vector3(0, 1, 0), toThreeVec(dirXYZ).clone().normalize());
+            coneMesh.quaternion.copy(q);
+            const apexOffset = toThreeVec(dirXYZ.clone().multiplyScalar(height / 2));
+            coneMesh.position.copy(toThreeVec(apexPosXYZ).clone().sub(apexOffset));
+        }
+
+        // ---------- 信息栏 ----------
+        function updateInfo() {
+            const timeEl = document.getElementById('currentTime');
+            timeEl.textContent = state.time.toFixed(2);
+
+            // 导弹位置（建模坐标）
+            const Mdir = M0.clone().multiplyScalar(-1).normalize();
+            const Mt = M0.clone().add(Mdir.clone().multiplyScalar(v_missile * state.time));
+            document.getElementById('missilePos').textContent = `${Mt.x.toFixed(0)}, ${Mt.y.toFixed(0)}, ${Mt.z.toFixed(0)}`;
+
+            const dirXY = new THREE.Vector3(-D0.x, -D0.y, 0).normalize();
+            const Dt = state.time <= t_throw ? D0.clone().add(dirXY.clone().multiplyScalar(v_drone * Math.min(state.time, t_throw))) : D0.clone().add(dirXY.clone().multiplyScalar(v_drone * t_throw));
+            document.getElementById('dronePos').textContent = `${Dt.x.toFixed(0)}, ${Dt.y.toFixed(0)}, ${Dt.z.toFixed(0)}`;
+
+            const blockStatus = document.getElementById('blockStatus');
+            if (state.blocked) { blockStatus.textContent = '被遮蔽'; blockStatus.classList.remove('ok'); blockStatus.classList.add('bad'); }
+            else { blockStatus.textContent = '未遮蔽'; blockStatus.classList.add('ok'); blockStatus.classList.remove('bad'); }
+
+            if (state.tOn !== null) document.getElementById('blockStart').textContent = state.tOn.toFixed(2);
+            if (state.tOff !== null) document.getElementById('blockEnd').textContent = state.tOff.toFixed(2);
+            if (state.tOn !== null && state.tOff !== null) document.getElementById('totalBlockTime').textContent = (state.tOff - state.tOn).toFixed(2);
+        }
+
+        function setSmokeStatus(text) { document.getElementById('smokeStatus').textContent = text; }
+
+        function render() { renderer.render(scene, camera); }
+    </script>
+</body>
+
+</html>
