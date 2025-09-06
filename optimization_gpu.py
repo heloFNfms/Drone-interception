@@ -93,15 +93,15 @@ class OptimizationAlgorithmGPU:
     def __init__(self):
         # 物理常量和初始条件
         self.g = 9.8  # 重力加速度 m/s²
-        self.v_missile = 500  # 导弹速度 m/s
+        self.v_missile = 300  # 导弹速度 m/s
         
-        # 导弹初始位置 M(0,0,1000)
-        self.M0 = Vector3GPU(0, 0, 1000)
+        # 导弹初始位置 M(20000,0,2000)
+        self.M0 = Vector3GPU(20000,0,2000)
         
-        # 圆柱体目标参数 B(20000,0,0)
-        self.B_CENTER = Vector3GPU(20000, 0, 0)  # 圆柱体中心
-        self.B_RADIUS = 100  # 圆柱体半径 m
-        self.B_HEIGHT = 200  # 圆柱体高度 m
+        # 圆柱体目标参数 B(0,200,0)
+        self.B_CENTER = Vector3GPU(0,200,0)  # 圆柱体中心
+        self.B_RADIUS = 7# 圆柱体半径 m
+        self.B_HEIGHT = 10  # 圆柱体高度 m
         
         # 固定参数
         self.SMOKE_RADIUS = 10  # 烟球半径固定为10m
